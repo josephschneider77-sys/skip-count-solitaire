@@ -26,10 +26,12 @@ import {
   CARD_H,
   CARD_LEAN,
   CARD_W,
+  CARD_Y,
   cameraDirection,
   columnX,
   layoutForAspect,
   ndcSideMargin,
+  orthoHalfExtents,
   type LayoutMetrics,
 } from "./layout";
 
@@ -67,7 +69,7 @@ export class SkipCountGame {
   private readonly canvas = document.querySelector<HTMLCanvasElement>("#scene")!;
   private readonly renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, alpha: true });
   private readonly scene = new THREE.Scene();
-  private readonly camera = new THREE.PerspectiveCamera(42, 1, 0.1, 80);
+  private readonly camera = new THREE.OrthographicCamera(-8, 8, 6, -6, 0.1, 80);
   private readonly raycaster = new THREE.Raycaster();
   private readonly pointer = new THREE.Vector2();
   private readonly clock = new THREE.Clock();
@@ -323,7 +325,7 @@ export class SkipCountGame {
       const view = this.cards.get(card.id);
       if (!view) return;
       view.group.position.copy(this.poseFor(card.id));
-      view.flipper.rotation.y = Math.PI;
+      view.flipper.rotation.x = Math.PI;
     });
     this.busy = true;
     let delay = 0;
@@ -332,7 +334,7 @@ export class SkipCountGame {
       const view = this.cards.get(card.id);
       if (!view) return;
       view.group.position.copy(this.stockOrigin());
-      view.flipper.rotation.y = Math.PI;
+      view.flipper.rotation.x = Math.PI;
       this.animateTo(view, this.poseFor(card.id), card.faceUp ? 0 : Math.PI, 0.32, delay, () => {
         if (index === queue.length - 1) {
           this.busy = false;
@@ -356,20 +358,20 @@ export class SkipCountGame {
   }
 
   private stockOrigin(): THREE.Vector3 {
-    return new THREE.Vector3(this.colX(0), 1.02, this.layout().topZ);
+    return new THREE.Vector3(this.colX(0), CARD_Y, this.layout().topZ);
   }
 
   private wasteOrigin(): THREE.Vector3 {
-    return new THREE.Vector3(this.colX(1), 1.02, this.layout().topZ);
+    return new THREE.Vector3(this.colX(1), CARD_Y, this.layout().topZ);
   }
 
   private foundationOrigin(column: number): THREE.Vector3 {
-    return new THREE.Vector3(this.colX(3 + column), 1.02, this.layout().topZ);
+    return new THREE.Vector3(this.colX(3 + column), CARD_Y, this.layout().topZ);
   }
 
   private tableauOrigin(column: number, index: number): THREE.Vector3 {
     const { tableauZ0, cascade } = this.layout();
-    return new THREE.Vector3(this.colX(column), 1.02 + index * 0.01, tableauZ0 + index * cascade);
+    return new THREE.Vector3(this.colX(column), CARD_Y + index * 0.012, tableauZ0 + index * cascade);
   }
 
   private snapLayout(): void {
@@ -450,13 +452,13 @@ export class SkipCountGame {
 
   private boardSamplePoints(): THREE.Vector3[] {
     const hx = CARD_W * 0.5;
-    const hz = CARD_H * 0.36;
+    const hz = CARD_H * 0.5;
     const points: THREE.Vector3[] = [];
     this.boardAnchors().forEach((point) => {
-      points.push(new THREE.Vector3(point.x - hx, 1.02, point.z - hz));
-      points.push(new THREE.Vector3(point.x + hx, 1.02, point.z - hz));
-      points.push(new THREE.Vector3(point.x - hx, 1.02, point.z + hz));
-      points.push(new THREE.Vector3(point.x + hx, 1.02, point.z + hz));
+      points.push(new THREE.Vector3(point.x - hx, CARD_Y, point.z - hz));
+      points.push(new THREE.Vector3(point.x + hx, CARD_Y, point.z - hz));
+      points.push(new THREE.Vector3(point.x - hx, CARD_Y, point.z + hz));
+      points.push(new THREE.Vector3(point.x + hx, CARD_Y, point.z + hz));
     });
     return points;
   }
@@ -498,6 +500,7 @@ export class SkipCountGame {
   }
 
   private placeCamera(look: THREE.Vector3, direction: THREE.Vector3, distance: number): void {
+    this.camera.up.set(0, 0, -1);
     this.camera.position.copy(look).addScaledVector(direction, distance);
     this.camera.lookAt(look);
     this.camera.updateMatrixWorld();
@@ -520,65 +523,50 @@ export class SkipCountGame {
     return { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
   }
 
+  private applyOrtho(halfW: number, halfH: number): void {
+    this.camera.left = -halfW;
+    this.camera.right = halfW;
+    this.camera.top = halfH;
+    this.camera.bottom = -halfH;
+    this.camera.updateProjectionMatrix();
+  }
+
   private fitCamera(): void {
     const width = this.canvas.clientWidth || window.innerWidth || 1;
     const height = this.canvas.clientHeight || window.innerHeight || 1;
     const aspect = width / Math.max(1, height);
-    this.camera.aspect = aspect || 1;
-    this.camera.fov = aspect < 0.7 ? 50 : aspect < 1 ? 42 : 38;
-    this.camera.updateProjectionMatrix();
     const points = this.boardSamplePoints();
     const box = this.boardBounds();
     const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
-    const look = new THREE.Vector3(center.x, 0.55, center.z);
+    const look = new THREE.Vector3(center.x, CARD_Y, center.z);
     const aim = cameraDirection(aspect);
     const direction = new THREE.Vector3(aim.x, aim.y, aim.z);
     const { side, top, bottom } = this.ndcMargins();
-    const vFov = THREE.MathUtils.degToRad(this.camera.fov);
-    const hFov = 2 * Math.atan(Math.tan(vFov / 2) * Math.max(aspect, 0.01));
-    const usableW = 2 * Math.tan(hFov / 2) * (1 - side);
-    const usableH = 2 * Math.tan(vFov / 2) * (1 - (top + bottom) / 2);
-    let lo = Math.max(size.x / Math.max(usableW, 0.05), size.z / Math.max(usableH, 0.05)) * 0.65;
-    let hi = Math.max(lo / 0.65, 6);
-    this.placeCamera(look, direction, hi);
+    let { halfW, halfH } = orthoHalfExtents(size.x, size.z, aspect || 1, side, top, bottom);
+    this.placeCamera(look, direction, 12);
+    this.applyOrtho(halfW, halfH);
     if (!this.pointsFitInView(points, side, top, bottom)) {
-      hi *= 1.45;
-    }
-    this.placeCamera(look, direction, lo);
-    if (this.pointsFitInView(points, side, top, bottom)) {
-      hi = lo;
-    } else {
-      for (let i = 0; i < 16; i += 1) {
-        const mid = (lo + hi) / 2;
-        this.placeCamera(look, direction, mid);
-        if (this.pointsFitInView(points, side, top, bottom)) hi = mid;
-        else lo = mid;
+      for (let i = 0; i < 10 && !this.pointsFitInView(points, side, top, bottom); i += 1) {
+        halfW *= 1.04;
+        halfH *= 1.04;
+        this.applyOrtho(halfW, halfH);
       }
     }
-    let dist = hi * 1.015;
-    this.placeCamera(look, direction, dist);
-
-    const right = new THREE.Vector3();
-    const up = new THREE.Vector3();
-    const camDir = new THREE.Vector3();
     for (let i = 0; i < 6; i += 1) {
       const ndc = this.projectedPointsCenter(points);
       const targetY = (-1 + bottom + (1 - top)) / 2;
       const errX = ndc.x;
       const errY = ndc.y - targetY;
       if (Math.abs(errX) < 0.012 && Math.abs(errY) < 0.012) break;
-      this.camera.getWorldDirection(camDir);
-      right.crossVectors(camDir, this.camera.up).normalize();
-      up.crossVectors(right, camDir).normalize();
-      const worldW = 2 * dist * Math.tan(hFov / 2);
-      const worldH = 2 * dist * Math.tan(vFov / 2);
-      look.addScaledVector(right, errX * worldW * 0.5);
-      look.addScaledVector(up, errY * worldH * 0.5);
-      this.placeCamera(look, direction, dist);
+      look.x += errX * halfW;
+      look.z -= errY * halfH;
+      this.placeCamera(look, direction, 12);
+      this.applyOrtho(halfW, halfH);
       if (!this.pointsFitInView(points, side, top, bottom)) {
-        dist *= 1.02;
-        this.placeCamera(look, direction, dist);
+        halfW *= 1.03;
+        halfH *= 1.03;
+        this.applyOrtho(halfW, halfH);
       }
     }
   }
@@ -595,9 +583,9 @@ export class SkipCountGame {
       group: view.group,
       from: view.group.position.clone(),
       to: to.clone(),
-      fromFlip: view.flipper.rotation.y,
+      fromFlip: view.flipper.rotation.x,
       toFlip,
-      hop: 0.9,
+      hop: 0.35,
       delay,
       duration,
       elapsed: 0,
@@ -748,7 +736,7 @@ export class SkipCountGame {
         const view = this.cards.get(card.id);
         if (!view) return;
         view.group.position.copy(this.poseFor(card.id));
-        view.flipper.rotation.y = Math.PI;
+        view.flipper.rotation.x = Math.PI;
       });
       this.syncHud();
       this.syncHighlights();
@@ -914,11 +902,11 @@ export class SkipCountGame {
       tween.group.position.y += Math.sin(t * Math.PI) * tween.hop;
       const flipper = tween.group.children[0]?.children[0];
       if (flipper) {
-        flipper.rotation.y = THREE.MathUtils.lerp(tween.fromFlip, tween.toFlip, easeInOut(t));
+        flipper.rotation.x = THREE.MathUtils.lerp(tween.fromFlip, tween.toFlip, easeInOut(t));
       }
       if (t >= 1) {
         tween.group.position.copy(tween.to);
-        if (flipper) flipper.rotation.y = tween.toFlip;
+        if (flipper) flipper.rotation.x = tween.toFlip;
         tween.onDone?.();
         this.tweens.splice(i, 1);
       }
