@@ -265,21 +265,23 @@ export function makeFaceTexture(theme: DeckTheme, value: number, suit: Suit): TH
       drawIcon(ctx, theme.icon, x, y, size, color);
     });
 
+    const valueText = String(value);
+    const valueSize = valueText.length >= 3 ? 32 : 42;
     ctx.fillStyle = suitInk;
-    ctx.font = "800 42px 'Baloo 2', 'Trebuchet MS', sans-serif";
+    ctx.font = `800 ${valueSize}px 'Baloo 2', 'Trebuchet MS', sans-serif`;
     ctx.textBaseline = "top";
     ctx.textAlign = "left";
-    ctx.fillText(String(value), 22, 18);
+    ctx.fillText(valueText, 22, 18);
     ctx.font = "800 28px serif";
     ctx.fillText(glyph, 22, 58);
 
     ctx.save();
     ctx.translate(FACE_W - 22, FACE_H - 18);
     ctx.rotate(Math.PI);
-    ctx.font = "800 42px 'Baloo 2', 'Trebuchet MS', sans-serif";
+    ctx.font = `800 ${valueSize}px 'Baloo 2', 'Trebuchet MS', sans-serif`;
     ctx.textAlign = "left";
     ctx.textBaseline = "top";
-    ctx.fillText(String(value), 0, 0);
+    ctx.fillText(valueText, 0, 0);
     ctx.font = "800 28px serif";
     ctx.fillText(glyph, 0, 40);
     ctx.restore();

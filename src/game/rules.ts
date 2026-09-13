@@ -48,8 +48,16 @@ export function shuffle<T>(items: T[], rng: () => number = Math.random): T[] {
   return copy;
 }
 
-export function multiplesUpTo(multiplier: number, cap = 100): number[] {
+export const RANKS_PER_SUIT = 13;
+
+export function highestMultiple(multiplier: number): number {
+  return multiplier * RANKS_PER_SUIT;
+}
+
+/** Skip-count ranks for a level: N, 2N, …, 13N (classic 13-rank suit). */
+export function multiplesUpTo(multiplier: number): number[] {
   const values: number[] = [];
+  const cap = highestMultiple(multiplier);
   for (let value = multiplier; value <= cap; value += multiplier) {
     values.push(value);
   }

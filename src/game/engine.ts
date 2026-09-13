@@ -20,15 +20,7 @@ import {
 } from "./rules";
 import { themeFor, type DeckTheme } from "./themes";
 import { edgeMaterial, makeBackTexture, makeFaceTexture, makePadTexture, makeTableTexture } from "./textures";
-
-const CARD_W = 1.42;
-const CARD_H = 2.02;
-const CARD_D = 0.05;
-const CARD_LEAN = -0.26;
-const COL_GAP = 1.54;
-const TABLEAU_Z0 = 0.2;
-const CASCADE = 0.4;
-const TOP_Z = -2.55;
+import { CARD_D, CARD_H, CARD_LEAN, CARD_W, columnX, layoutForAspect, ndcSideMargin, type LayoutMetrics } from "./layout";
 
 type CardView = {
   model: CardModel;
@@ -236,8 +228,12 @@ export class SkipCountGame {
     this.selectedId = null;
     this.clearCards();
     this.state = dealKlondike(multiplier);
-    this.fitCamera();
     this.refreshPads();
+    this.fitCamera();
+    requestAnimationFrame(() => {
+      this.snapLayout();
+      this.fitCamera();
+    });
     this.syncHud();
     this.buildCards();
     this.dealIntro();
@@ -325,24 +321,39 @@ export class SkipCountGame {
     if (queue.length === 0) this.busy = false;
   }
 
+  private layout(): LayoutMetrics {
+    const width = this.canvas.clientWidth || window.innerWidth || 1;
+    const height = this.canvas.clientHeight || window.innerHeight || 1;
+    return layoutForAspect(width / Math.max(1, height));
+  }
+
   private colX(column: number): number {
-    return (column - 3) * COL_GAP;
+    return columnX(column, this.layout().colGap);
   }
 
   private stockOrigin(): THREE.Vector3 {
-    return new THREE.Vector3(this.colX(0), 1.02, TOP_Z);
+    return new THREE.Vector3(this.colX(0), 1.02, this.layout().topZ);
   }
 
   private wasteOrigin(): THREE.Vector3 {
-    return new THREE.Vector3(this.colX(1), 1.02, TOP_Z);
+    return new THREE.Vector3(this.colX(1), 1.02, this.layout().topZ);
   }
 
   private foundationOrigin(column: number): THREE.Vector3 {
-    return new THREE.Vector3(this.colX(3 + column), 1.02, TOP_Z);
+    return new THREE.Vector3(this.colX(3 + column), 1.02, this.layout().topZ);
   }
 
   private tableauOrigin(column: number, index: number): THREE.Vector3 {
-    return new THREE.Vector3(this.colX(column), 1.02 + index * 0.01, TABLEAU_Z0 + index * CASCADE);
+    const { tableauZ0, cascade } = this.layout();
+    return new THREE.Vector3(this.colX(column), 1.02 + index * 0.01, tableauZ0 + index * cascade);
+  }
+
+  private snapLayout(): void {
+    this.placePads();
+    if (this.tweens.length > 0) return;
+    this.cards.forEach((view, id) => {
+      view.group.position.copy(this.poseFor(id));
+    });
   }
 
   private placePads(): void {
@@ -386,7 +397,7 @@ export class SkipCountGame {
     if (loc.pile === "waste") {
       const fromEnd = this.state.waste.length - 1 - loc.index;
       const fan = Math.max(0, 2 - fromEnd);
-      return this.wasteOrigin().add(new THREE.Vector3(fan * 0.18, loc.index * 0.01, 0));
+      return this.wasteOrigin().add(new THREE.Vector3(fan * this.layout().wasteFan, loc.index * 0.01, 0));
     }
     if (loc.pile === "foundation" && loc.column !== undefined) {
       return this.foundationOrigin(loc.column).add(new THREE.Vector3(0, loc.index * 0.012, 0));
@@ -396,23 +407,25 @@ export class SkipCountGame {
 
   private boardBounds(): THREE.Box3 {
     const box = new THREE.Box3();
-    const hx = CARD_W * 0.6;
-    const hy = CARD_H * 0.55;
+    const hx = CARD_W * 0.5;
+    const hz = CARD_H * 0.4;
+    const slack = 1;
     const maxCascade = this.state
-      ? Math.max(7, ...this.state.tableau.map((col) => col.length + 1))
+      ? Math.max(1, ...this.state.tableau.map((col) => col.length)) + slack
       : 7;
+    const wasteFan = this.layout().wasteFan * 2;
     const anchors: THREE.Vector3[] = [
       this.stockOrigin(),
-      this.wasteOrigin(),
+      this.wasteOrigin().add(new THREE.Vector3(wasteFan, 0, 0)),
       ...[0, 1, 2, 3].map((i) => this.foundationOrigin(i)),
     ];
     for (let column = 0; column < 7; column += 1) {
       anchors.push(this.tableauOrigin(column, 0));
-      anchors.push(this.tableauOrigin(column, maxCascade - 1));
+      anchors.push(this.tableauOrigin(column, Math.max(0, maxCascade - 1)));
     }
     anchors.forEach((point) => {
-      box.expandByPoint(new THREE.Vector3(point.x - hx, 0, point.z - 0.25));
-      box.expandByPoint(new THREE.Vector3(point.x + hx, 2.15, point.z + hy));
+      box.expandByPoint(new THREE.Vector3(point.x - hx, 0.02, point.z - hz));
+      box.expandByPoint(new THREE.Vector3(point.x + hx, 2.02, point.z + hz));
     });
     return box;
   }
@@ -420,15 +433,15 @@ export class SkipCountGame {
   private ndcMargins(): { side: number; top: number; bottom: number } {
     const width = this.canvas.clientWidth || window.innerWidth || 1;
     const height = this.canvas.clientHeight || window.innerHeight || 1;
+    const aspect = width / Math.max(1, height);
     const hud = document.querySelector("#hud");
     const hint = document.querySelector("#hint-line");
-    const hudH = hud instanceof HTMLElement && !hud.hidden ? hud.getBoundingClientRect().height + 10 : 12;
-    const hintH = hint instanceof HTMLElement && !hint.hidden ? hint.getBoundingClientRect().height + 14 : 16;
-    const aspect = width / height;
+    const hudH = hud instanceof HTMLElement && !hud.hidden ? hud.getBoundingClientRect().height + 8 : 10;
+    const hintH = hint instanceof HTMLElement && !hint.hidden ? hint.getBoundingClientRect().height + 10 : 12;
     return {
-      side: aspect < 0.75 ? 0.1 : 0.08,
-      top: (hudH / height) * 2 + 0.08,
-      bottom: (hintH / height) * 2 + 0.08,
+      side: ndcSideMargin(aspect),
+      top: Math.min(0.42, (hudH / height) * 2 + 0.05),
+      bottom: Math.min(0.28, (hintH / height) * 2 + 0.05),
     };
   }
 
@@ -457,35 +470,83 @@ export class SkipCountGame {
     });
   }
 
+  private placeCamera(look: THREE.Vector3, direction: THREE.Vector3, distance: number): void {
+    this.camera.position.copy(look).addScaledVector(direction, distance);
+    this.camera.lookAt(look);
+    this.camera.updateMatrixWorld();
+    this.camera.updateProjectionMatrix();
+  }
+
+  private projectedBoxCenter(box: THREE.Box3): { x: number; y: number } {
+    const center = box.getCenter(new THREE.Vector3()).project(this.camera);
+    return { x: center.x, y: center.y };
+  }
+
   private fitCamera(): void {
-    const aspect = this.canvas.clientWidth / Math.max(1, this.canvas.clientHeight);
+    const width = this.canvas.clientWidth || window.innerWidth || 1;
+    const height = this.canvas.clientHeight || window.innerHeight || 1;
+    const aspect = width / Math.max(1, height);
     this.camera.aspect = aspect || 1;
-    this.camera.fov = aspect < 0.7 ? 48 : aspect < 1 ? 44 : 38;
+    this.camera.fov = aspect < 0.7 ? 48 : aspect < 1 ? 42 : 38;
+    this.camera.updateProjectionMatrix();
     const box = this.boardBounds();
     const center = box.getCenter(new THREE.Vector3());
-    const look = new THREE.Vector3(center.x, Math.max(0.4, center.y * 0.5), center.z);
+    const size = box.getSize(new THREE.Vector3());
+    const look = new THREE.Vector3(center.x, 0.28, center.z);
     const direction =
       aspect < 0.75
-        ? new THREE.Vector3(0, 1.15, 0.72).normalize()
+        ? new THREE.Vector3(0, 0.78, 0.9).normalize()
         : aspect < 1
-          ? new THREE.Vector3(0, 0.82, 0.9).normalize()
+          ? new THREE.Vector3(0, 0.82, 0.88).normalize()
           : new THREE.Vector3(0, 0.58, 1).normalize();
     const { side, top, bottom } = this.ndcMargins();
-    let near = 6;
-    let far = 48;
-    for (let i = 0; i < 18; i += 1) {
-      const mid = (near + far) / 2;
-      this.camera.position.copy(look).addScaledVector(direction, mid);
-      this.camera.lookAt(look);
-      this.camera.updateMatrixWorld();
-      this.camera.updateProjectionMatrix();
-      if (this.boxFitsInView(box, side, top, bottom)) far = mid;
-      else near = mid;
+    const vFov = THREE.MathUtils.degToRad(this.camera.fov);
+    const hFov = 2 * Math.atan(Math.tan(vFov / 2) * Math.max(aspect, 0.01));
+    const usableW = 2 * Math.tan(hFov / 2) * (1 - side);
+    const usableH = 2 * Math.tan(vFov / 2) * (1 - (top + bottom) / 2);
+    let lo = Math.max(size.x / Math.max(usableW, 0.05), size.z / Math.max(usableH, 0.05), 5.2) * 0.72;
+    let hi = lo / 0.72 + 4;
+    this.placeCamera(look, direction, hi);
+    if (!this.boxFitsInView(box, side, top, bottom)) {
+      hi *= 1.6;
+      this.placeCamera(look, direction, hi);
     }
-    const pad = this.camera.aspect < 0.75 ? 1.08 : 1.04;
-    this.camera.position.copy(look).addScaledVector(direction, far * pad);
-    this.camera.lookAt(look);
-    this.camera.updateProjectionMatrix();
+    this.placeCamera(look, direction, lo);
+    if (this.boxFitsInView(box, side, top, bottom)) {
+      hi = lo;
+    } else {
+      for (let i = 0; i < 14; i += 1) {
+        const mid = (lo + hi) / 2;
+        this.placeCamera(look, direction, mid);
+        if (this.boxFitsInView(box, side, top, bottom)) hi = mid;
+        else lo = mid;
+      }
+    }
+    let dist = hi * 1.02;
+    this.placeCamera(look, direction, dist);
+
+    const right = new THREE.Vector3();
+    const up = new THREE.Vector3();
+    const camDir = new THREE.Vector3();
+    for (let i = 0; i < 6; i += 1) {
+      const ndc = this.projectedBoxCenter(box);
+      const targetY = ((-1 + bottom) + (1 - top)) / 2;
+      const errX = ndc.x;
+      const errY = ndc.y - targetY;
+      if (Math.abs(errX) < 0.015 && Math.abs(errY) < 0.015) break;
+      this.camera.getWorldDirection(camDir);
+      right.crossVectors(camDir, this.camera.up).normalize();
+      up.crossVectors(right, camDir).normalize();
+      const worldW = 2 * dist * Math.tan(hFov / 2);
+      const worldH = 2 * dist * Math.tan(vFov / 2);
+      look.addScaledVector(right, errX * worldW * 0.5);
+      look.addScaledVector(up, errY * worldH * 0.5);
+      this.placeCamera(look, direction, dist);
+      if (!this.boxFitsInView(box, side, top, bottom)) {
+        dist *= 1.035;
+        this.placeCamera(look, direction, dist);
+      }
+    }
   }
 
   private animateTo(
@@ -748,8 +809,7 @@ export class SkipCountGame {
     const width = this.canvas.clientWidth || window.innerWidth;
     const height = this.canvas.clientHeight || window.innerHeight;
     this.renderer.setSize(width, height, false);
-    this.camera.aspect = width / height;
-    this.camera.fov = width < 700 ? 46 : 38;
+    this.snapLayout();
     this.fitCamera();
   }
 

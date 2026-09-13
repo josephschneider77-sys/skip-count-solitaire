@@ -6,11 +6,12 @@ Play here: https://josephschneider77-sys.github.io/skip-count-solitaire/
 
 ## Deck
 
-Not a 52-card A–K deck. Level **N** uses every multiple of N up to about 100, in **♥ ♦ ♣ ♠**.
+Classic **52-card** decks (13 ranks × 4 suits), but ranks are skip-count multiples instead of A–K. Level **N** uses N, 2N, …, 13N in **♥ ♦ ♣ ♠**.
 
-- Level 2: 2, 4, 6, …, 100 × 4 suits (200 cards)
-- Level 3: 3, 6, 9, …, 99 × 4 suits
-- … through Level 10: 10, 20, …, 100 × 4 suits
+- Level 2: 2, 4, …, 26
+- Level 3: 3, 6, …, 39
+- Level 4: 4, 8, …, 52
+- … through Level 10: 10, 20, …, 130
 
 ## How to play
 
