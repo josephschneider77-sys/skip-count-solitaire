@@ -7,6 +7,7 @@ import {
   canStackOnTableau,
   dealKlondike,
   drawFromStock,
+  emptyColumnHint,
   findCard,
   foundationCount,
   isTopWasteOrTableau,
@@ -260,6 +261,9 @@ export class SkipCountGame {
     this.undos = [];
     this.clearCards();
     this.state = dealKlondike(multiplier);
+    if (import.meta.env.DEV && new URLSearchParams(window.location.search).get("glow") === "1") {
+      this.arrangeEmptyKingDemo();
+    }
     this.refreshPads();
     this.fitCamera();
     requestAnimationFrame(() => {
@@ -916,16 +920,87 @@ export class SkipCountGame {
     if (!this.state) return;
     const playable = new Set(playableFoundationIds(this.state));
     const selectedRun = this.selectedId ? new Set((runFrom(this.state, this.selectedId) ?? []).map((card) => card.id)) : new Set<string>();
+    const emptyHint = emptyColumnHint(this.state);
     const boost = performance.now() < this.hintUntil;
     this.cards.forEach((view, id) => {
       const mats = view.mesh.material as THREE.MeshStandardMaterial[];
       const face = mats[4];
       if (!face) return;
       const selected = selectedRun.has(id);
+      const kingHint = emptyHint?.wasteId === id;
       const ready = playable.has(id);
-      face.emissive = new THREE.Color(selected ? this.theme.glow : ready ? this.theme.accent2 : "#000000");
-      face.emissiveIntensity = selected ? 0.7 : ready ? (boost ? 0.85 : 0.42) : 0;
+      if (selected) {
+        face.emissive = new THREE.Color(this.theme.glow);
+        face.emissiveIntensity = 0.7;
+      } else if (kingHint) {
+        face.emissive = new THREE.Color(this.theme.glow);
+        face.emissiveIntensity = 0.48;
+      } else if (ready) {
+        face.emissive = new THREE.Color(this.theme.accent2);
+        face.emissiveIntensity = boost ? 0.85 : 0.42;
+      } else {
+        face.emissive = new THREE.Color("#000000");
+        face.emissiveIntensity = 0;
+      }
     });
+    this.glowEmptyPads(emptyHint?.columns ?? [], 0.4);
+  }
+
+  private glowEmptyPads(columns: number[], pulse: number): void {
+    const hinted = new Set(columns);
+    this.tableauPads.forEach((pad, index) => {
+      const mat = pad.material as THREE.MeshStandardMaterial;
+      if (hinted.has(index)) {
+        mat.color.set(this.theme.accent);
+        mat.emissive = new THREE.Color(this.theme.glow);
+        mat.emissiveIntensity = 0.22 + pulse * 0.28;
+        mat.opacity = 0.28 + pulse * 0.18;
+      } else {
+        mat.color.set(0xff8ad8);
+        mat.emissive = new THREE.Color("#000000");
+        mat.emissiveIntensity = 0;
+        mat.opacity = 0.18;
+      }
+    });
+  }
+
+  private arrangeEmptyKingDemo(): void {
+    if (!this.state) return;
+    const king = this.allCards(this.state).find((card) => card.value === this.state!.highest);
+    if (!king) return;
+    const loc = findCard(this.state, king.id);
+    if (!loc) return;
+    if (loc.pile === "stock") this.state.stock.splice(loc.index, 1);
+    else if (loc.pile === "waste") this.state.waste.splice(loc.index, 1);
+    else if (loc.pile === "foundation" && loc.column !== undefined) {
+      this.state.foundations[loc.column]?.splice(loc.index, 1);
+    } else if (loc.pile === "tableau" && loc.column !== undefined) {
+      this.state.tableau[loc.column]?.splice(loc.index, 1);
+    }
+    king.faceUp = true;
+    this.state.waste.push(king);
+    const first = this.state.tableau[0];
+    if (!first) return;
+    while (first.length > 0) {
+      const card = first.pop();
+      if (!card) break;
+      card.faceUp = false;
+      this.state.stock.unshift(card);
+    }
+  }
+
+  private pulseEmptyKingHint(): void {
+    if (!this.state) return;
+    const hint = emptyColumnHint(this.state);
+    if (!hint) return;
+    const pulse = 0.5 + Math.sin(performance.now() / 260) * 0.5;
+    const view = this.cards.get(hint.wasteId);
+    const face = view ? (view.mesh.material as THREE.MeshStandardMaterial[])[4] : undefined;
+    if (face && this.selectedId !== hint.wasteId) {
+      face.emissive = new THREE.Color(this.theme.glow);
+      face.emissiveIntensity = 0.32 + pulse * 0.28;
+    }
+    this.glowEmptyPads(hint.columns, pulse);
   }
 
   private resize(): void {
@@ -977,6 +1052,7 @@ export class SkipCountGame {
       this.syncHighlights();
     }
 
+    this.pulseEmptyKingHint();
     this.renderer.render(this.scene, this.camera);
   }
 }

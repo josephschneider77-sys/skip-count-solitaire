@@ -8,6 +8,8 @@ import {
   dealKlondike,
   deckSize,
   drawFromStock,
+  emptyColumnHint,
+  emptyTableauColumns,
   isWon,
   multiplesUpTo,
   playToTableau,
@@ -168,6 +170,36 @@ assert.equal(
   canStackOnTableau(emptyLevel3, { id: "k36", value: 36, multiplier: 3, suit: "hearts", faceUp: true }, 2),
   false,
 );
+
+const glowHint = dealKlondike(2, rngFrom(19));
+glowHint.tableau[0] = [];
+glowHint.waste = [{ id: "glow-26", value: 26, multiplier: 2, suit: "hearts", faceUp: true }];
+assert.deepEqual(emptyTableauColumns(glowHint), [0]);
+assert.deepEqual(emptyColumnHint(glowHint), { wasteId: "glow-26", columns: [0] });
+glowHint.waste = [{ id: "glow-24", value: 24, multiplier: 2, suit: "hearts", faceUp: true }];
+assert.equal(emptyColumnHint(glowHint), null);
+glowHint.waste = [{ id: "glow-26b", value: 26, multiplier: 2, suit: "spades", faceUp: true }];
+glowHint.tableau[0] = [{ id: "blocker", value: 8, multiplier: 2, suit: "clubs", faceUp: true }];
+assert.equal(emptyColumnHint(glowHint), null);
+glowHint.tableau[0] = [];
+glowHint.stock = [{ id: "next-draw", value: 4, multiplier: 2, suit: "diamonds", faceUp: false }];
+assert.ok(emptyColumnHint(glowHint));
+assert.equal(drawFromStock(glowHint), "draw");
+assert.equal(glowHint.waste.at(-1)?.id, "next-draw");
+assert.equal(emptyColumnHint(glowHint), null, "hint stops when the waste top is no longer the highest");
+
+const glowPlayed = dealKlondike(2, rngFrom(20));
+glowPlayed.tableau[6] = [];
+glowPlayed.waste = [{ id: "play-26", value: 26, multiplier: 2, suit: "clubs", faceUp: true }];
+assert.ok(emptyColumnHint(glowPlayed));
+assert.equal(playToTableau(glowPlayed, "play-26", 6), true);
+assert.equal(emptyColumnHint(glowPlayed), null, "hint stops after the king fills the empty column");
+
+const glowLevel3 = dealKlondike(3, rngFrom(21));
+glowLevel3.tableau[1] = [];
+glowLevel3.tableau[4] = [];
+glowLevel3.waste = [{ id: "glow-39", value: 39, multiplier: 3, suit: "diamonds", faceUp: true }];
+assert.deepEqual(emptyColumnHint(glowLevel3), { wasteId: "glow-39", columns: [1, 4] });
 
 const heartsPlay = dealKlondike(2, rngFrom(6));
 heartsPlay.waste = [{ id: "waste-2h", value: 2, multiplier: 2, suit: "hearts", faceUp: true }];

@@ -155,6 +155,22 @@ export function playableWasteId(state: GameState): string | undefined {
   return top?.faceUp ? top.id : undefined;
 }
 
+export function emptyTableauColumns(state: GameState): number[] {
+  return state.tableau.flatMap((pile, index) => (pile.length === 0 ? [index] : []));
+}
+
+/**
+ * Waste-top king that can fill an empty column: face-up N×13 on waste,
+ * plus at least one vacant tableau slot.
+ */
+export function emptyColumnHint(state: GameState): { wasteId: string; columns: number[] } | null {
+  const top = state.waste[state.waste.length - 1];
+  if (!top?.faceUp || top.value !== state.highest) return null;
+  const columns = emptyTableauColumns(state);
+  if (columns.length === 0) return null;
+  return { wasteId: top.id, columns };
+}
+
 /** Move a waste or tableau run onto a column. Returns false if the play is illegal. */
 export function playToTableau(state: GameState, id: string, column: number): boolean {
   const run = runFrom(state, id);
