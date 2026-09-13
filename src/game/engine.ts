@@ -396,8 +396,8 @@ export class SkipCountGame {
 
   private boardBounds(): THREE.Box3 {
     const box = new THREE.Box3();
-    const hx = CARD_W * 0.55;
-    const hy = CARD_H * 0.55;
+    const hx = CARD_W * 0.72;
+    const hy = CARD_H * 0.62;
     const maxCascade = this.state
       ? Math.max(7, ...this.state.tableau.map((col) => col.length + 1))
       : 7;
@@ -418,15 +418,17 @@ export class SkipCountGame {
   }
 
   private ndcMargins(): { side: number; top: number; bottom: number } {
+    const width = this.canvas.clientWidth || window.innerWidth || 1;
     const height = this.canvas.clientHeight || window.innerHeight || 1;
     const hud = document.querySelector("#hud");
     const hint = document.querySelector("#hint-line");
     const hudH = hud instanceof HTMLElement && !hud.hidden ? hud.getBoundingClientRect().height + 10 : 12;
     const hintH = hint instanceof HTMLElement && !hint.hidden ? hint.getBoundingClientRect().height + 14 : 16;
+    const aspect = width / height;
     return {
-      side: 0.07,
-      top: (hudH / height) * 2 + 0.08,
-      bottom: (hintH / height) * 2 + 0.07,
+      side: aspect < 0.75 ? 0.14 : 0.09,
+      top: (hudH / height) * 2 + 0.1,
+      bottom: (hintH / height) * 2 + 0.09,
     };
   }
 
@@ -475,7 +477,8 @@ export class SkipCountGame {
       if (this.boxFitsInView(box, side, top, bottom)) far = mid;
       else near = mid;
     }
-    this.camera.position.copy(look).addScaledVector(direction, far * 1.04);
+    const pad = this.camera.aspect < 0.75 ? 1.16 : 1.06;
+    this.camera.position.copy(look).addScaledVector(direction, far * pad);
     this.camera.lookAt(look);
     this.camera.updateProjectionMatrix();
   }
