@@ -157,18 +157,11 @@ export function themeFor(multiplier: number): DeckTheme {
   return DECK_THEMES[multiplier] ?? DECK_THEMES[2];
 }
 
-/** Level 2 practices 2s all the way to 100. Levels 3–10 use that number times 1 through 10. */
+/** Every level uses that multiplier’s skip-count through about 100. */
 export function deckValues(multiplier: number): number[] {
-  const maxFactor = multiplier === 2 ? 50 : 10;
   const values: number[] = [];
-  for (let factor = 1; factor <= maxFactor; factor += 1) {
-    values.push(multiplier * factor);
+  for (let value = multiplier; value <= 100; value += multiplier) {
+    values.push(value);
   }
   return values;
-}
-
-export function tableauColumnCount(cardCount: number): number {
-  if (cardCount <= 12) return 4;
-  if (cardCount <= 24) return 5;
-  return 7;
 }

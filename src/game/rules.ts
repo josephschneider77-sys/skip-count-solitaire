@@ -1,23 +1,44 @@
+export type Suit = "hearts" | "diamonds" | "clubs" | "spades";
 export type PileKind = "stock" | "waste" | "foundation" | "tableau";
+
+export const SUITS: Suit[] = ["hearts", "diamonds", "clubs", "spades"];
+
+export const SUIT_GLYPH: Record<Suit, string> = {
+  hearts: "♥",
+  diamonds: "♦",
+  clubs: "♣",
+  spades: "♠",
+};
+
+export const SUIT_COLOR: Record<Suit, "red" | "black"> = {
+  hearts: "red",
+  diamonds: "red",
+  clubs: "black",
+  spades: "black",
+};
 
 export type CardModel = {
   id: string;
   value: number;
   multiplier: number;
+  suit: Suit;
+  faceUp: boolean;
 };
 
 export type GameState = {
   multiplier: number;
+  lowest: number;
+  highest: number;
   stock: CardModel[];
   waste: CardModel[];
-  foundation: CardModel[];
+  foundations: CardModel[][];
   tableau: CardModel[][];
 };
 
-export function shuffle<T>(items: T[]): T[] {
+export function shuffle<T>(items: T[], rng: () => number = Math.random): T[] {
   const copy = [...items];
   for (let i = copy.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(rng() * (i + 1));
     const current = copy[i];
     const swap = copy[j];
     if (current === undefined || swap === undefined) continue;
@@ -27,21 +48,58 @@ export function shuffle<T>(items: T[]): T[] {
   return copy;
 }
 
-export function nextNeeded(state: GameState): number {
-  return state.multiplier * (state.foundation.length + 1);
+export function multiplesUpTo(multiplier: number, cap = 100): number[] {
+  const values: number[] = [];
+  for (let value = multiplier; value <= cap; value += multiplier) {
+    values.push(value);
+  }
+  return values;
 }
 
-export function canPlayToFoundation(state: GameState, card: CardModel): boolean {
-  return card.value === nextNeeded(state);
+export function buildDeck(multiplier: number): CardModel[] {
+  const values = multiplesUpTo(multiplier);
+  const cards: CardModel[] = [];
+  values.forEach((value) => {
+    SUITS.forEach((suit) => {
+      cards.push({
+        id: `${multiplier}-${value}-${suit}`,
+        value,
+        multiplier,
+        suit,
+        faceUp: false,
+      });
+    });
+  });
+  return cards;
 }
 
-export function canStackOnTableau(state: GameState, card: CardModel, column: number): boolean {
-  const dest = state.tableau[column];
-  if (!dest) return false;
-  if (dest.length === 0) return true;
-  const top = dest[dest.length - 1];
-  if (!top || top.id === card.id) return false;
-  return top.value - card.value === state.multiplier;
+export function dealKlondike(multiplier: number, rng: () => number = Math.random): GameState {
+  const values = multiplesUpTo(multiplier);
+  const lowest = values[0] ?? multiplier;
+  const highest = values[values.length - 1] ?? multiplier;
+  const deck = shuffle(buildDeck(multiplier), rng);
+  const tableau: CardModel[][] = Array.from({ length: 7 }, () => []);
+  for (let column = 0; column < 7; column += 1) {
+    for (let row = 0; row <= column; row += 1) {
+      const card = deck.pop();
+      if (!card) break;
+      card.faceUp = row === column;
+      tableau[column]?.push(card);
+    }
+  }
+  return {
+    multiplier,
+    lowest,
+    highest,
+    stock: deck,
+    waste: [],
+    foundations: Array.from({ length: 4 }, () => []),
+    tableau,
+  };
+}
+
+export function suitIndex(suit: Suit): number {
+  return SUITS.indexOf(suit);
 }
 
 export function findCard(state: GameState, id: string): { pile: PileKind; column?: number; index: number } | null {
@@ -49,8 +107,12 @@ export function findCard(state: GameState, id: string): { pile: PileKind; column
   if (wasteIndex >= 0) return { pile: "waste", index: wasteIndex };
   const stockIndex = state.stock.findIndex((card) => card.id === id);
   if (stockIndex >= 0) return { pile: "stock", index: stockIndex };
-  const foundationIndex = state.foundation.findIndex((card) => card.id === id);
-  if (foundationIndex >= 0) return { pile: "foundation", index: foundationIndex };
+  for (let column = 0; column < state.foundations.length; column += 1) {
+    const pile = state.foundations[column];
+    if (!pile) continue;
+    const index = pile.findIndex((card) => card.id === id);
+    if (index >= 0) return { pile: "foundation", column, index };
+  }
   for (let column = 0; column < state.tableau.length; column += 1) {
     const pile = state.tableau[column];
     if (!pile) continue;
@@ -60,7 +122,47 @@ export function findCard(state: GameState, id: string): { pile: PileKind; column
   return null;
 }
 
-export function isTopPlayable(state: GameState, id: string): boolean {
+export function canPlayToFoundation(state: GameState, card: CardModel): boolean {
+  const pile = state.foundations[suitIndex(card.suit)];
+  if (!pile) return false;
+  if (pile.length === 0) return card.value === state.lowest;
+  const top = pile[pile.length - 1];
+  return Boolean(top && top.suit === card.suit && card.value - top.value === state.multiplier);
+}
+
+export function canPlaceOnCard(state: GameState, moving: CardModel, dest: CardModel): boolean {
+  return dest.value - moving.value === state.multiplier && SUIT_COLOR[dest.suit] !== SUIT_COLOR[moving.suit];
+}
+
+export function canStackOnTableau(state: GameState, moving: CardModel, column: number): boolean {
+  const dest = state.tableau[column];
+  if (!dest) return false;
+  if (dest.length === 0) return moving.value === state.highest;
+  const top = dest[dest.length - 1];
+  return Boolean(top && top.faceUp && canPlaceOnCard(state, moving, top));
+}
+
+export function runFrom(state: GameState, id: string): CardModel[] | null {
+  const loc = findCard(state, id);
+  if (!loc) return null;
+  if (loc.pile === "waste") {
+    const top = state.waste[state.waste.length - 1];
+    return top && top.id === id && top.faceUp ? [top] : null;
+  }
+  if (loc.pile !== "tableau" || loc.column === undefined) return null;
+  const pile = state.tableau[loc.column];
+  if (!pile) return null;
+  const run = pile.slice(loc.index);
+  if (run.length === 0 || run.some((card) => !card.faceUp)) return null;
+  for (let i = 1; i < run.length; i += 1) {
+    const above = run[i - 1];
+    const below = run[i];
+    if (!above || !below || !canPlaceOnCard(state, below, above)) return null;
+  }
+  return run;
+}
+
+export function isTopWasteOrTableau(state: GameState, id: string): boolean {
   const loc = findCard(state, id);
   if (!loc) return false;
   if (loc.pile === "waste") return loc.index === state.waste.length - 1;
@@ -71,56 +173,69 @@ export function isTopPlayable(state: GameState, id: string): boolean {
   return false;
 }
 
-export function removeCard(state: GameState, id: string): CardModel | null {
+export function removeRun(state: GameState, id: string): CardModel[] {
   const loc = findCard(state, id);
-  if (!loc) return null;
+  if (!loc) return [];
   if (loc.pile === "waste") {
-    const [card] = state.waste.splice(loc.index, 1);
-    return card ?? null;
+    if (loc.index !== state.waste.length - 1) return [];
+    const card = state.waste.pop();
+    return card ? [card] : [];
   }
-  if (loc.pile === "stock") {
-    const [card] = state.stock.splice(loc.index, 1);
-    return card ?? null;
-  }
-  if (loc.pile === "foundation") {
-    const [card] = state.foundation.splice(loc.index, 1);
-    return card ?? null;
+  if (loc.pile === "foundation" && loc.column !== undefined) {
+    const pile = state.foundations[loc.column];
+    if (!pile || loc.index !== pile.length - 1) return [];
+    const card = pile.pop();
+    return card ? [card] : [];
   }
   if (loc.pile === "tableau" && loc.column !== undefined) {
     const pile = state.tableau[loc.column];
-    if (!pile) return null;
-    const [card] = pile.splice(loc.index, 1);
-    return card ?? null;
+    if (!pile) return [];
+    const run = pile.splice(loc.index);
+    const exposed = pile[pile.length - 1];
+    if (exposed && !exposed.faceUp) exposed.faceUp = true;
+    return run;
   }
-  return null;
+  return [];
 }
 
-export function dealState(multiplier: number, values: number[], columns: number): GameState {
-  const cards = shuffle(
-    values.map((value, i) => ({
-      id: `${multiplier}-${value}-${i}`,
-      value,
-      multiplier,
-    })),
-  );
-  const keepInStock = Math.min(Math.max(3, Math.floor(cards.length * 0.35)), Math.max(0, cards.length - columns));
-  const tableauCards = cards.slice(0, cards.length - keepInStock);
-  const stock = cards.slice(cards.length - keepInStock);
-  const tableau: CardModel[][] = Array.from({ length: columns }, () => []);
-  tableauCards.forEach((card, index) => {
-    const column = tableau[index % columns];
-    column?.push(card);
+export function drawFromStock(state: GameState): "draw" | "recycle" | "empty" {
+  if (state.stock.length > 0) {
+    const card = state.stock.pop();
+    if (!card) return "empty";
+    card.faceUp = true;
+    state.waste.push(card);
+    return "draw";
+  }
+  if (state.waste.length === 0) return "empty";
+  state.stock = state.waste
+    .splice(0, state.waste.length)
+    .reverse()
+    .map((card) => {
+      card.faceUp = false;
+      return card;
+    });
+  return "recycle";
+}
+
+export function playableFoundationIds(state: GameState): string[] {
+  const ids: string[] = [];
+  const wasteTop = state.waste[state.waste.length - 1];
+  if (wasteTop && canPlayToFoundation(state, wasteTop)) ids.push(wasteTop.id);
+  state.tableau.forEach((pile) => {
+    const top = pile[pile.length - 1];
+    if (top && top.faceUp && canPlayToFoundation(state, top)) ids.push(top.id);
   });
-  return {
-    multiplier,
-    stock,
-    waste: [],
-    foundation: [],
-    tableau,
-  };
+  return ids;
 }
 
-export function playableCardIds(state: GameState): string[] {
-  const need = nextNeeded(state);
-  return [...state.waste, ...state.tableau.flat()].filter((card) => card.value === need).map((card) => card.id);
+export function foundationCount(state: GameState): number {
+  return state.foundations.reduce((sum, pile) => sum + pile.length, 0);
+}
+
+export function deckSize(multiplier: number): number {
+  return multiplesUpTo(multiplier).length * SUITS.length;
+}
+
+export function isWon(state: GameState): boolean {
+  return foundationCount(state) === deckSize(state.multiplier);
 }
