@@ -1,31 +1,39 @@
 import * as THREE from "three";
 import { Sfx } from "./audio";
 import {
+  SUIT_GLYPH,
+  SUITS,
   canPlayToFoundation,
   canStackOnTableau,
-  dealState,
+  dealKlondike,
+  drawFromStock,
   findCard,
-  isTopPlayable,
-  nextNeeded,
-  playableCardIds,
-  removeCard,
+  foundationCount,
+  isTopWasteOrTableau,
+  isWon,
+  playableFoundationIds,
+  removeRun,
+  runFrom,
+  suitIndex,
   type CardModel,
   type GameState,
 } from "./rules";
-import { deckValues, tableauColumnCount, themeFor, type DeckTheme } from "./themes";
+import { themeFor, type DeckTheme } from "./themes";
 import { edgeMaterial, makeBackTexture, makeFaceTexture, makePadTexture, makeTableTexture } from "./textures";
 
-const CARD_W = 1.58;
-const CARD_H = 2.24;
-const CARD_D = 0.06;
-const CARD_LEAN = -0.3;
+const CARD_W = 1.48;
+const CARD_H = 2.1;
+const CARD_D = 0.05;
+const CARD_LEAN = -0.28;
+const COL_GAP = 1.72;
+const TABLEAU_Z0 = 0.15;
+const CASCADE = 0.48;
 
 type CardView = {
   model: CardModel;
   group: THREE.Group;
   flipper: THREE.Group;
   mesh: THREE.Mesh;
-  faceUp: boolean;
 };
 
 type Tween = {
@@ -65,7 +73,8 @@ export class SkipCountGame {
   private readonly sharedGeo = new THREE.BoxGeometry(CARD_W, CARD_H, CARD_D);
   private readonly textureCache = new Map<string, THREE.CanvasTexture>();
   private stockPad: THREE.Mesh | null = null;
-  private foundationPad: THREE.Mesh | null = null;
+  private foundationPads: THREE.Mesh[] = [];
+  private tableauPads: THREE.Mesh[] = [];
 
   private state: GameState | null = null;
   private theme: DeckTheme = themeFor(2);
@@ -93,7 +102,7 @@ export class SkipCountGame {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
     this.scene.background = new THREE.Color("#5b1f86");
-    this.scene.fog = new THREE.Fog("#5b1f86", 18, 36);
+    this.scene.fog = new THREE.Fog("#5b1f86", 20, 40);
   }
 
   private setupLights(): void {
@@ -107,14 +116,11 @@ export class SkipCountGame {
     const cyan = new THREE.PointLight(0x7dffd8, 14, 26);
     cyan.position.set(7, 4, 1);
     this.scene.add(cyan);
-    const lemon = new THREE.PointLight(0xffe36a, 10, 20);
-    lemon.position.set(0, 6, 6);
-    this.scene.add(lemon);
   }
 
   private setupTable(): void {
     const table = new THREE.Mesh(
-      new THREE.CircleGeometry(16, 64),
+      new THREE.CircleGeometry(18, 64),
       new THREE.MeshStandardMaterial({
         map: makeTableTexture(),
         roughness: 0.55,
@@ -123,16 +129,7 @@ export class SkipCountGame {
     );
     table.rotation.x = -Math.PI / 2;
     table.position.y = -0.04;
-    table.receiveShadow = true;
     this.scene.add(table);
-
-    const ring = new THREE.Mesh(
-      new THREE.RingGeometry(11.4, 12.1, 64),
-      new THREE.MeshBasicMaterial({ color: 0xffe36a, side: THREE.DoubleSide, transparent: true, opacity: 0.55 }),
-    );
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.y = 0.01;
-    this.scene.add(ring);
 
     const padGeo = new THREE.PlaneGeometry(CARD_W, CARD_H);
     const padMat = new THREE.MeshStandardMaterial({
@@ -146,15 +143,34 @@ export class SkipCountGame {
     this.stockPad.rotation.x = CARD_LEAN;
     this.stockPad.userData.pad = "stock";
     this.scene.add(this.stockPad);
-    this.foundationPad = new THREE.Mesh(padGeo.clone(), padMat.clone());
-    this.foundationPad.rotation.x = CARD_LEAN;
-    this.foundationPad.userData.pad = "foundation";
-    this.scene.add(this.foundationPad);
+
+    for (let i = 0; i < 4; i += 1) {
+      const pad = new THREE.Mesh(padGeo.clone(), padMat.clone());
+      pad.rotation.x = CARD_LEAN;
+      pad.userData.pad = "foundation";
+      pad.userData.column = i;
+      this.scene.add(pad);
+      this.foundationPads.push(pad);
+    }
+    for (let i = 0; i < 7; i += 1) {
+      const pad = new THREE.Mesh(padGeo.clone(), padMat.clone());
+      pad.rotation.x = CARD_LEAN;
+      pad.userData.pad = "tableau";
+      pad.userData.column = i;
+      pad.material = new THREE.MeshStandardMaterial({
+        color: 0xff8ad8,
+        transparent: true,
+        opacity: 0.18,
+        roughness: 0.6,
+      });
+      this.scene.add(pad);
+      this.tableauPads.push(pad);
+    }
     this.placePads();
   }
 
   private setupParticles(): void {
-    const count = 160;
+    const count = 120;
     const positions = new Float32Array(count * 3);
     for (let i = 0; i < count; i += 1) {
       positions[i * 3] = (Math.random() - 0.5) * 18;
@@ -165,7 +181,7 @@ export class SkipCountGame {
     geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
     this.particles = new THREE.Points(
       geo,
-      new THREE.PointsMaterial({ color: 0xffe36a, size: 0.09, transparent: true, opacity: 0.85 }),
+      new THREE.PointsMaterial({ color: 0xffe36a, size: 0.09, transparent: true, opacity: 0.8 }),
     );
     this.scene.add(this.particles);
   }
@@ -217,8 +233,7 @@ export class SkipCountGame {
     this.theme = themeFor(multiplier);
     this.selectedId = null;
     this.clearCards();
-    const values = deckValues(multiplier);
-    this.state = dealState(multiplier, values, tableauColumnCount(values.length));
+    this.state = dealKlondike(multiplier);
     this.fitCamera();
     this.refreshPads();
     this.syncHud();
@@ -230,7 +245,7 @@ export class SkipCountGame {
     this.tweens.length = 0;
     this.cards.forEach((view) => {
       this.scene.remove(view.group);
-      view.mesh.material && disposeMaterials(view.mesh);
+      disposeMaterials(view.mesh);
     });
     this.cards.clear();
     this.textureCache.forEach((tex) => tex.dispose());
@@ -246,13 +261,16 @@ export class SkipCountGame {
     return texture;
   }
 
+  private allCards(state: GameState): CardModel[] {
+    return [...state.stock, ...state.waste, ...state.foundations.flat(), ...state.tableau.flat()];
+  }
+
   private buildCards(): void {
     if (!this.state) return;
     const back = this.tex(`back-${this.theme.multiplier}`, () => makeBackTexture(this.theme));
     const edge = edgeMaterial(this.theme.accent);
-    const all = [...this.state.stock, ...this.state.waste, ...this.state.foundation, ...this.state.tableau.flat()];
-    all.forEach((model) => {
-      const face = this.tex(`face-${model.multiplier}-${model.value}`, () => makeFaceTexture(this.theme, model.value));
+    this.allCards(this.state).forEach((model) => {
+      const face = this.tex(`face-${model.id}`, () => makeFaceTexture(this.theme, model.value, model.suit));
       const materials = [
         edge,
         edge.clone(),
@@ -272,108 +290,107 @@ export class SkipCountGame {
       group.userData.cardId = model.id;
       mesh.userData.cardId = model.id;
       this.scene.add(group);
-      this.cards.set(model.id, { model, group, flipper, mesh, faceUp: false });
+      this.cards.set(model.id, { model, group, flipper, mesh });
     });
   }
 
   private dealIntro(): void {
     if (!this.state) return;
     this.placePads();
-    this.busy = true;
     this.state.stock.forEach((card) => {
       const view = this.cards.get(card.id);
       if (!view) return;
-      view.faceUp = false;
-      view.group.position.copy(this.poseFor(card.id).position);
+      view.group.position.copy(this.poseFor(card.id));
       view.flipper.rotation.y = Math.PI;
     });
+    this.busy = true;
     let delay = 0;
-    const queue: CardModel[] = [];
-    this.state.tableau.forEach((col) => queue.push(...col));
+    const queue = this.state.tableau.flat();
     queue.forEach((card, index) => {
       const view = this.cards.get(card.id);
       if (!view) return;
-      view.faceUp = true;
-      view.group.position.copy(this.stockPose(0).position);
+      view.group.position.copy(this.stockOrigin());
       view.flipper.rotation.y = Math.PI;
-      this.animateTo(view, this.poseFor(card.id).position, 0, 0.44, delay, () => {
+      this.animateTo(view, this.poseFor(card.id), card.faceUp ? 0 : Math.PI, 0.32, delay, () => {
         if (index === queue.length - 1) {
           this.busy = false;
           this.syncHighlights();
         }
       });
-      delay += 0.045;
+      delay += 0.028;
     });
     if (queue.length === 0) this.busy = false;
   }
 
+  private stockOrigin(): THREE.Vector3 {
+    return new THREE.Vector3(-5.15, 1.05, -3.35);
+  }
+
+  private wasteOrigin(): THREE.Vector3 {
+    return new THREE.Vector3(-3.35, 1.05, -3.35);
+  }
+
+  private foundationOrigin(column: number): THREE.Vector3 {
+    return new THREE.Vector3(-0.15 + column * COL_GAP, 1.05, -3.35);
+  }
+
+  private tableauOrigin(column: number, index: number): THREE.Vector3 {
+    const x = -3 * COL_GAP + column * COL_GAP;
+    return new THREE.Vector3(x, 1.05 + index * 0.01, TABLEAU_Z0 + index * CASCADE);
+  }
+
   private placePads(): void {
-    const origin = this.stockOrigin();
-    if (this.stockPad) this.stockPad.position.set(origin.x, 1.08, origin.z);
-    if (this.foundationPad) {
-      this.foundationPad.position.set(this.foundationX(), 1.08, origin.z);
-    }
+    const stock = this.stockOrigin();
+    if (this.stockPad) this.stockPad.position.copy(stock);
+    this.foundationPads.forEach((pad, i) => pad.position.copy(this.foundationOrigin(i)));
+    this.tableauPads.forEach((pad, i) => pad.position.copy(this.tableauOrigin(i, 0)));
   }
 
   private refreshPads(): void {
     this.placePads();
-    if (!this.stockPad || !this.foundationPad) return;
-    const draw = makePadTexture("DRAW", this.theme.label, this.theme);
-    const next = makePadTexture("NEXT", this.state ? String(nextNeeded(this.state)) : this.theme.label, this.theme);
-    const stockMat = this.stockPad.material as THREE.MeshStandardMaterial;
-    const foundMat = this.foundationPad.material as THREE.MeshStandardMaterial;
-    stockMat.map?.dispose();
-    foundMat.map?.dispose();
-    stockMat.map = draw;
-    foundMat.map = next;
-    stockMat.needsUpdate = true;
-    foundMat.needsUpdate = true;
+    if (this.stockPad) {
+      const draw = makePadTexture("DRAW", this.theme.label, this.theme);
+      const mat = this.stockPad.material as THREE.MeshStandardMaterial;
+      mat.map?.dispose();
+      mat.map = draw;
+      mat.needsUpdate = true;
+    }
+    this.foundationPads.forEach((pad, i) => {
+      const suit = SUITS[i];
+      const glyph = suit ? SUIT_GLYPH[suit] : "?";
+      const pile = this.state?.foundations[i];
+      const top = pile?.[pile.length - 1];
+      const label = top ? String(top.value) : glyph;
+      const tex = makePadTexture("HOME", label, this.theme);
+      const mat = pad.material as THREE.MeshStandardMaterial;
+      mat.map?.dispose();
+      mat.map = tex;
+      mat.needsUpdate = true;
+    });
   }
 
-  private stockOrigin(): THREE.Vector3 {
-    const columns = this.state?.tableau.length ?? 4;
-    const span = (columns - 1) * 1.82;
-    return new THREE.Vector3(-span / 2 - 0.15, 0, -2.55);
-  }
-
-  private foundationX(): number {
-    const columns = this.state?.tableau.length ?? 4;
-    const span = (columns - 1) * 1.82;
-    return span / 2 + 0.15;
-  }
-
-  private stockPose(indexFromTop: number): { position: THREE.Vector3 } {
-    const origin = this.stockOrigin();
-    return { position: new THREE.Vector3(origin.x, 1.08 + indexFromTop * 0.012, origin.z) };
-  }
-
-  private poseFor(id: string): { position: THREE.Vector3 } {
-    if (!this.state) return { position: new THREE.Vector3() };
+  private poseFor(id: string): THREE.Vector3 {
+    if (!this.state) return new THREE.Vector3();
     const loc = findCard(this.state, id);
-    const origin = this.stockOrigin();
-    if (!loc) return { position: origin.clone() };
+    if (!loc) return this.stockOrigin();
     if (loc.pile === "stock") {
-      return { position: new THREE.Vector3(origin.x, 1.08 + loc.index * 0.012, origin.z - loc.index * 0.008) };
+      const depth = Math.max(0, loc.index - Math.max(0, this.state.stock.length - 10));
+      return this.stockOrigin().add(new THREE.Vector3(0, depth * 0.012, -depth * 0.006));
     }
     if (loc.pile === "waste") {
-      return { position: new THREE.Vector3(origin.x + 1.9, 1.08 + loc.index * 0.012, origin.z) };
+      const fromEnd = this.state.waste.length - 1 - loc.index;
+      const fan = Math.max(0, 2 - fromEnd);
+      return this.wasteOrigin().add(new THREE.Vector3(fan * 0.18, loc.index * 0.01, 0));
     }
-    if (loc.pile === "foundation") {
-      return { position: new THREE.Vector3(this.foundationX(), 1.1 + loc.index * 0.012, origin.z) };
+    if (loc.pile === "foundation" && loc.column !== undefined) {
+      return this.foundationOrigin(loc.column).add(new THREE.Vector3(0, loc.index * 0.012, 0));
     }
-    const columns = this.state.tableau.length;
-    const span = (columns - 1) * 1.82;
-    const x = -span / 2 + (loc.column ?? 0) * 1.82;
-    const z = 0.35 + loc.index * 0.7;
-    return { position: new THREE.Vector3(x, 1.08 + loc.index * 0.012, z) };
+    return this.tableauOrigin(loc.column ?? 0, loc.index);
   }
 
   private fitCamera(): void {
-    const columns = this.state?.tableau.length ?? 4;
-    const width = Math.max(11, columns * 1.9 + 3.4);
-    const dist = Math.max(12.6, width * 0.92);
-    this.camera.position.set(0, 6.15, dist);
-    this.camera.lookAt(0, 0.95, 0.15);
+    this.camera.position.set(0, 7.4, 14.2);
+    this.camera.lookAt(0, 0.7, 0.4);
     this.camera.updateProjectionMatrix();
   }
 
@@ -391,7 +408,7 @@ export class SkipCountGame {
       to: to.clone(),
       fromFlip: view.flipper.rotation.y,
       toFlip,
-      hop: 1.15,
+      hop: 0.9,
       delay,
       duration,
       elapsed: 0,
@@ -406,22 +423,30 @@ export class SkipCountGame {
     this.pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     this.raycaster.setFromCamera(this.pointer, this.camera);
     const meshes = [...this.cards.values()].map((view) => view.mesh);
-    const pads = [this.stockPad, this.foundationPad].filter((mesh): mesh is THREE.Mesh => Boolean(mesh));
+    const pads = [this.stockPad, ...this.foundationPads, ...this.tableauPads].filter((mesh): mesh is THREE.Mesh =>
+      Boolean(mesh),
+    );
     const hits = this.raycaster.intersectObjects([...meshes, ...pads], false);
     const first = hits[0]?.object;
-    if (first?.userData.pad === "stock") {
+    if (!first) {
+      this.selectedId = null;
+      this.syncHighlights();
+      return;
+    }
+    if (first.userData.pad === "stock") {
       this.drawCard();
       return;
     }
-    if (first?.userData.pad === "foundation") {
-      this.tryMoveSelectedToFoundation();
+    if (first.userData.pad === "foundation") {
+      this.tryFoundation(first.userData.column as number | undefined);
       return;
     }
-    const id = first?.userData.cardId as string | undefined;
-    if (!id) {
-      this.tryEmptyTableauClick();
+    if (first.userData.pad === "tableau") {
+      this.tryTableauMove(first.userData.column as number);
       return;
     }
+    const id = first.userData.cardId as string | undefined;
+    if (!id) return;
     const loc = findCard(this.state, id);
     if (!loc) return;
     if (loc.pile === "stock") {
@@ -429,42 +454,30 @@ export class SkipCountGame {
       return;
     }
     if (loc.pile === "foundation") {
-      if (this.selectedId) this.tryMoveSelectedToFoundation();
+      this.tryFoundation(loc.column);
       return;
     }
     this.onCardTapped(id);
-  }
-
-  private tryEmptyTableauClick(): void {
-    if (!this.state || !this.selectedId) return;
-    const selected = this.cards.get(this.selectedId);
-    if (!selected) return;
-    for (let column = 0; column < this.state.tableau.length; column += 1) {
-      if (this.state.tableau[column]?.length) continue;
-      if (canStackOnTableau(this.state, selected.model, column)) {
-        this.moveToTableau(this.selectedId, column);
-        return;
-      }
-    }
   }
 
   private onCardTapped(id: string): void {
     if (!this.state) return;
     const loc = findCard(this.state, id);
     if (!loc) return;
-    const model = this.cards.get(id)?.model;
-    if (model && loc.pile !== "foundation" && canPlayToFoundation(this.state, model)) {
+    const card = loc.pile === "waste" ? this.state.waste[loc.index] : this.state.tableau[loc.column ?? 0]?.[loc.index];
+    if (!card?.faceUp) return;
+
+    if (this.selectedId && this.selectedId !== id && loc.pile === "tableau" && loc.column !== undefined) {
+      if (this.tryTableauMove(loc.column)) return;
+    }
+
+    if (isTopWasteOrTableau(this.state, id) && canPlayToFoundation(this.state, card)) {
       this.moveToFoundation(id);
       return;
     }
-    if (loc.pile === "tableau" && this.selectedId && this.selectedId !== id) {
-      const selected = this.cards.get(this.selectedId)?.model;
-      if (selected && loc.column !== undefined && canStackOnTableau(this.state, selected, loc.column)) {
-        this.moveToTableau(this.selectedId, loc.column);
-        return;
-      }
-    }
-    if (!isTopPlayable(this.state, id)) {
+
+    const run = runFrom(this.state, id);
+    if (!run) {
       this.selectedId = null;
       this.syncHighlights();
       return;
@@ -474,55 +487,68 @@ export class SkipCountGame {
     this.syncHighlights();
   }
 
-  private tryMoveSelectedToFoundation(): void {
-    if (!this.state || !this.selectedId) return;
-    const model = this.cards.get(this.selectedId)?.model;
-    if (model && canPlayToFoundation(this.state, model)) this.moveToFoundation(this.selectedId);
+  private tryFoundation(column?: number): void {
+    if (!this.state) return;
+    const id = this.selectedId ?? this.state.waste[this.state.waste.length - 1]?.id;
+    if (!id) return;
+    const run = runFrom(this.state, id);
+    if (!run || run.length !== 1) return;
+    const card = run[0];
+    if (!card || !canPlayToFoundation(this.state, card)) return;
+    if (column !== undefined && suitIndex(card.suit) !== column) return;
+    this.moveToFoundation(id);
+  }
+
+  private tryTableauMove(column: number): boolean {
+    if (!this.state || !this.selectedId) return false;
+    const run = runFrom(this.state, this.selectedId);
+    if (!run || !run[0] || !canStackOnTableau(this.state, run[0], column)) return false;
+    this.moveRunToTableau(this.selectedId, column);
+    return true;
   }
 
   private drawCard(): void {
     if (!this.state || this.busy) return;
-    if (this.state.stock.length === 0) {
-      if (this.state.waste.length === 0) return;
-      this.state.stock = this.state.waste.reverse();
-      this.state.waste = [];
+    const result = drawFromStock(this.state);
+    if (result === "empty") return;
+    this.sfx.draw();
+    this.selectedId = null;
+    if (result === "recycle") {
       this.state.stock.forEach((card) => {
         const view = this.cards.get(card.id);
         if (!view) return;
-        view.faceUp = false;
-        this.animateTo(view, this.poseFor(card.id).position, Math.PI, 0.28, 0);
+        view.group.position.copy(this.poseFor(card.id));
+        view.flipper.rotation.y = Math.PI;
       });
-      this.sfx.draw();
-      this.selectedId = null;
+      this.syncHud();
       this.syncHighlights();
       return;
     }
-    const card = this.state.stock.pop();
-    if (!card) return;
-    this.state.waste.push(card);
-    const view = this.cards.get(card.id);
-    if (!view) return;
+    const card = this.state.waste[this.state.waste.length - 1];
+    const view = card ? this.cards.get(card.id) : undefined;
+    if (!card || !view) return;
     this.busy = true;
-    view.faceUp = true;
-    this.sfx.draw();
-    this.animateTo(view, this.poseFor(card.id).position, 0, 0.38, 0, () => {
+    this.animateTo(view, this.poseFor(card.id), 0, 0.36, 0, () => {
       this.busy = false;
+      this.syncHud();
       this.syncHighlights();
     });
-    this.selectedId = null;
+    this.syncHud();
   }
 
   private moveToFoundation(id: string): void {
     if (!this.state) return;
-    const card = removeCard(this.state, id);
-    if (!card) return;
-    this.state.foundation.push(card);
-    const view = this.cards.get(id);
+    const run = removeRun(this.state, id);
+    const card = run[0];
+    if (!card || run.length !== 1) return;
+    this.state.foundations[suitIndex(card.suit)]?.push(card);
+    const view = this.cards.get(card.id);
     if (!view) return;
     this.busy = true;
     this.selectedId = null;
     this.sfx.place();
-    this.animateTo(view, this.poseFor(id).position, 0, 0.36, 0, () => {
+    this.relayoutExposed();
+    this.animateTo(view, this.poseFor(card.id), 0, 0.34, 0, () => {
       this.busy = false;
       this.refreshPads();
       this.syncHud();
@@ -533,43 +559,62 @@ export class SkipCountGame {
     this.syncHud();
   }
 
-  private moveToTableau(id: string, column: number): void {
+  private moveRunToTableau(id: string, column: number): void {
     if (!this.state) return;
-    const card = removeCard(this.state, id);
-    if (!card) return;
-    this.state.tableau[column]?.push(card);
-    const view = this.cards.get(id);
-    if (!view) return;
+    const run = removeRun(this.state, id);
+    if (run.length === 0) return;
+    this.state.tableau[column]?.push(...run);
     this.busy = true;
     this.selectedId = null;
     this.sfx.place();
-    this.animateTo(view, this.poseFor(id).position, 0, 0.32, 0, () => {
-      this.busy = false;
-      this.syncHighlights();
+    this.relayoutExposed();
+    let left = run.length;
+    run.forEach((card, i) => {
+      const view = this.cards.get(card.id);
+      if (!view) {
+        left -= 1;
+        return;
+      }
+      this.animateTo(view, this.poseFor(card.id), 0, 0.3, i * 0.03, () => {
+        left -= 1;
+        if (left <= 0) {
+          this.busy = false;
+          this.syncHighlights();
+        }
+      });
+    });
+  }
+
+  private relayoutExposed(): void {
+    if (!this.state) return;
+    this.state.tableau.forEach((pile) => {
+      pile.forEach((card) => {
+        const view = this.cards.get(card.id);
+        if (!view) return;
+        this.animateTo(view, this.poseFor(card.id), card.faceUp ? 0 : Math.PI, 0.22, 0);
+      });
     });
   }
 
   private showHint(): void {
     if (!this.state) return;
-    this.hintUntil = performance.now() + 2200;
+    this.hintUntil = performance.now() + 2400;
     this.syncHighlights();
     this.sfx.select();
   }
 
   private checkWin(): void {
-    if (!this.state) return;
-    const total = deckValues(this.state.multiplier).length;
-    if (this.state.foundation.length < total) return;
+    if (!this.state || !isWon(this.state)) return;
     this.sfx.win();
     const last = this.state.multiplier >= 10;
     const winTitle = document.querySelector("#win-title");
     const winBlurb = document.querySelector("#win-blurb");
     const nextBtn = document.querySelector("#btn-next");
-    if (winTitle) winTitle.textContent = last ? "Rainbow champion!" : "Sparkle clear!";
+    if (winTitle) winTitle.textContent = last ? "Rainbow champion!" : "Klondike clear!";
     if (winBlurb) {
       winBlurb.textContent = last
-        ? "You skip-counted every deck from 2's through 10's!"
-        : `The ${this.theme.label} deck is complete. Ready for the next multiples?`;
+        ? "You skip-counted every suited deck from 2's through 10's!"
+        : `Every ${this.theme.label} home pile is complete.`;
     }
     if (nextBtn) nextBtn.textContent = last ? "Play again" : "Next level";
     setHidden("#win-screen", false);
@@ -577,27 +622,29 @@ export class SkipCountGame {
 
   private syncHud(): void {
     if (!this.state) return;
+    const home = foundationCount(this.state);
     setText("#hud-level", String(this.state.multiplier));
-    setText("#hud-next", String(nextNeeded(this.state)));
+    setText("#hud-next", String(home));
     setText("#hud-theme", this.theme.label);
     const hint = document.querySelector("#hint-line");
     if (hint) {
-      hint.textContent = `Glow cards are next! Tap ${nextNeeded(this.state)}, then keep skip-counting ${this.theme.label}.`;
+      hint.textContent = `Klondike: draw, build each suit ${this.state.lowest}→${this.state.highest} by ${this.state.multiplier}s. Stack down and switch colors. Empty columns want ${this.state.highest}. Stock ${this.state.stock.length}.`;
     }
   }
 
   private syncHighlights(): void {
     if (!this.state) return;
-    const playable = new Set(playableCardIds(this.state));
+    const playable = new Set(playableFoundationIds(this.state));
+    const selectedRun = this.selectedId ? new Set((runFrom(this.state, this.selectedId) ?? []).map((card) => card.id)) : new Set<string>();
     const boost = performance.now() < this.hintUntil;
     this.cards.forEach((view, id) => {
       const mats = view.mesh.material as THREE.MeshStandardMaterial[];
       const face = mats[4];
       if (!face) return;
-      const selected = this.selectedId === id;
+      const selected = selectedRun.has(id);
       const ready = playable.has(id);
       face.emissive = new THREE.Color(selected ? this.theme.glow : ready ? this.theme.accent2 : "#000000");
-      face.emissiveIntensity = selected ? 0.7 : ready ? (boost ? 0.85 : 0.45) : 0;
+      face.emissiveIntensity = selected ? 0.7 : ready ? (boost ? 0.85 : 0.42) : 0;
     });
   }
 
@@ -606,9 +653,8 @@ export class SkipCountGame {
     const height = this.canvas.clientHeight || window.innerHeight;
     this.renderer.setSize(width, height, false);
     this.camera.aspect = width / height;
-    this.camera.fov = width < 700 ? 44 : 36;
+    this.camera.fov = width < 700 ? 46 : 38;
     this.fitCamera();
-    this.camera.updateProjectionMatrix();
   }
 
   private tick(): void {
@@ -617,7 +663,7 @@ export class SkipCountGame {
       this.particles.rotation.y += dt * 0.04;
       const positions = this.particles.geometry.getAttribute("position");
       for (let i = 0; i < positions.count; i += 1) {
-        const y = positions.getY(i) + dt * 0.18;
+        const y = positions.getY(i) + dt * 0.16;
         positions.setY(i, y > 9 ? 1 : y);
       }
       positions.needsUpdate = true;

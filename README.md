@@ -1,32 +1,33 @@
 # Skip Count Solitaire
 
-A kid-safe skip-counting card game in a Lisa Frank neon style. Each level uses **one themed deck** and one multiplier at a time.
+Kid-safe **Klondike** with Lisa Frank neon style and skip-count decks. One multiplier per level. Four suits.
 
 Play here: https://josephschneider77-sys.github.io/skip-count-solitaire/
 
+## Deck
+
+Not a 52-card A–K deck. Level **N** uses every multiple of N up to about 100, in **♥ ♦ ♣ ♠**.
+
+- Level 2: 2, 4, 6, …, 100 × 4 suits (200 cards)
+- Level 3: 3, 6, 9, …, 99 × 4 suits
+- … through Level 10: 10, 20, …, 100 × 4 suits
+
 ## How to play
 
-1. Open the title screen and tap **Play** (or pick a level).
-2. Level 2 is multiples of 2 up to 100. Levels 3–10 are that number times 1 through 10 (sevens go through 70, tens through 100).
-3. Tap the deck to **draw and flip** a 3D card.
-4. Tap the next skip-count number to place it on the sparkle foundation.
-5. You can also stack a smaller multiple onto a bigger one (down by the same skip) to reach buried cards.
+Classic 7-column Klondike plus a draw pile and waste.
 
-## Cards
-
-Faces follow Joe’s paper draft: corner values, a center **N’s** label, and cute theme icons. Every multiplier has its own rainbow deck.
+1. Build each suit’s **home** by skip-counting (same suit, up by N). Homes start with N itself.
+2. On the tableau, stack the **next-smaller** multiple and **switch colors** (red/black).
+3. Empty columns want the **biggest** multiple (the “king”).
+4. Tap the deck to draw and flip. Face-down cards flip when uncovered.
 
 ## Develop
 
 ```bash
 npm install
+npm test
 npm run dev
-```
-
-Production build for GitHub Pages uses Vite `base: '/skip-count-solitaire/'`.
-
-```bash
 npm run build
 ```
 
-No Play Store listing — this is a browser game only.
+Vite `base` is `/skip-count-solitaire/` for GitHub Pages. Browser game only — no Play Store listing.

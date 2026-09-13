@@ -1,8 +1,9 @@
 import * as THREE from "three";
+import { SUIT_COLOR, SUIT_GLYPH, type Suit } from "./rules";
 import type { DeckTheme, IconKind } from "./themes";
 
-const FACE_W = 512;
-const FACE_H = 768;
+const FACE_W = 256;
+const FACE_H = 384;
 
 function roundRect(
   ctx: CanvasRenderingContext2D,
@@ -231,55 +232,65 @@ function makeTexture(draw: (ctx: CanvasRenderingContext2D) => void): THREE.Canva
   return texture;
 }
 
-export function makeFaceTexture(theme: DeckTheme, value: number): THREE.CanvasTexture {
+export function makeFaceTexture(theme: DeckTheme, value: number, suit: Suit): THREE.CanvasTexture {
+  const suitInk = SUIT_COLOR[suit] === "red" ? "#e11d74" : "#3a1848";
+  const glyph = SUIT_GLYPH[suit];
   return makeTexture((ctx) => {
     ctx.fillStyle = theme.face;
-    roundRect(ctx, 0, 0, FACE_W, FACE_H, 48);
+    roundRect(ctx, 0, 0, FACE_W, FACE_H, 28);
     ctx.fill();
     const rim = ctx.createLinearGradient(0, 0, FACE_W, FACE_H);
     rim.addColorStop(0, theme.accent);
     rim.addColorStop(0.5, theme.accent2);
     rim.addColorStop(1, theme.accent);
     ctx.strokeStyle = rim;
-    ctx.lineWidth = 18;
-    roundRect(ctx, 16, 16, FACE_W - 32, FACE_H - 32, 40);
+    ctx.lineWidth = 10;
+    roundRect(ctx, 8, 8, FACE_W - 16, FACE_H - 16, 22);
     ctx.stroke();
     ctx.strokeStyle = theme.faceEdge;
-    ctx.lineWidth = 6;
-    roundRect(ctx, 32, 32, FACE_W - 64, FACE_H - 64, 32);
+    ctx.lineWidth = 3;
+    roundRect(ctx, 16, 16, FACE_W - 32, FACE_H - 32, 16);
     ctx.stroke();
 
     const iconSpots: Array<[number, number, number]> = [
-      [160, 220, 54],
-      [352, 220, 54],
-      [120, 384, 48],
-      [392, 384, 48],
-      [168, 530, 50],
-      [344, 530, 50],
+      [78, 118, 28],
+      [178, 118, 28],
+      [58, 196, 24],
+      [198, 196, 24],
+      [84, 268, 26],
+      [172, 268, 26],
     ];
     iconSpots.forEach(([x, y, size], i) => {
       const color = i % 2 === 0 ? theme.accent : theme.accent2;
       drawIcon(ctx, theme.icon, x, y, size, color);
     });
 
-    ctx.fillStyle = theme.ink;
-    ctx.font = "800 92px 'Baloo 2', 'Trebuchet MS', sans-serif";
+    ctx.fillStyle = suitInk;
+    ctx.font = "800 42px 'Baloo 2', 'Trebuchet MS', sans-serif";
     ctx.textBaseline = "top";
     ctx.textAlign = "left";
-    ctx.fillText(String(value), 48, 40);
+    ctx.fillText(String(value), 22, 18);
+    ctx.font = "800 28px serif";
+    ctx.fillText(glyph, 22, 58);
+
     ctx.save();
-    ctx.translate(FACE_W - 48, FACE_H - 40);
+    ctx.translate(FACE_W - 22, FACE_H - 18);
     ctx.rotate(Math.PI);
+    ctx.font = "800 42px 'Baloo 2', 'Trebuchet MS', sans-serif";
     ctx.textAlign = "left";
     ctx.textBaseline = "top";
     ctx.fillText(String(value), 0, 0);
+    ctx.font = "800 28px serif";
+    ctx.fillText(glyph, 0, 40);
     ctx.restore();
 
-    ctx.font = "800 86px 'Baloo 2', 'Trebuchet MS', sans-serif";
+    ctx.font = "800 44px 'Baloo 2', 'Trebuchet MS', sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillStyle = theme.ink;
-    ctx.fillText(theme.label, FACE_W / 2, FACE_H / 2 + 8);
+    ctx.fillStyle = suitInk;
+    ctx.fillText(theme.label, FACE_W / 2, FACE_H / 2 - 6);
+    ctx.font = "800 46px serif";
+    ctx.fillText(glyph, FACE_W / 2, FACE_H / 2 + 38);
   });
 }
 
@@ -290,31 +301,31 @@ export function makeBackTexture(theme: DeckTheme): THREE.CanvasTexture {
     bg.addColorStop(0.5, theme.accent);
     bg.addColorStop(1, theme.accent2);
     ctx.fillStyle = bg;
-    roundRect(ctx, 0, 0, FACE_W, FACE_H, 48);
+    roundRect(ctx, 0, 0, FACE_W, FACE_H, 28);
     ctx.fill();
     ctx.strokeStyle = "rgba(255,255,255,0.65)";
-    ctx.lineWidth = 16;
-    roundRect(ctx, 22, 22, FACE_W - 44, FACE_H - 44, 40);
+    ctx.lineWidth = 8;
+    roundRect(ctx, 10, 10, FACE_W - 20, FACE_H - 20, 20);
     ctx.stroke();
 
-    for (let i = 0; i < 18; i += 1) {
-      const x = 70 + (i % 6) * 74;
-      const y = 90 + Math.floor(i / 6) * 90;
-      drawSparkle(ctx, x, y + (i % 2) * 16, 22, "rgba(255,255,255,0.55)");
+    for (let i = 0; i < 12; i += 1) {
+      const x = 36 + (i % 4) * 56;
+      const y = 40 + Math.floor(i / 4) * 44;
+      drawSparkle(ctx, x, y + (i % 2) * 8, 12, "rgba(255,255,255,0.55)");
     }
 
     ctx.fillStyle = "rgba(255,255,255,0.22)";
-    roundRect(ctx, 86, 250, FACE_W - 172, 280, 36);
+    roundRect(ctx, 40, 130, FACE_W - 80, 130, 18);
     ctx.fill();
     ctx.fillStyle = theme.backInk;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.font = "800 72px 'Baloo 2', 'Trebuchet MS', sans-serif";
-    ctx.fillText(theme.label, FACE_W / 2, 340);
-    ctx.font = "700 36px 'Baloo 2', 'Trebuchet MS', sans-serif";
-    ctx.fillText(theme.name, FACE_W / 2, 430);
-    drawIcon(ctx, theme.icon, FACE_W / 2, 180, 88, theme.backInk);
-    drawIcon(ctx, theme.icon, FACE_W / 2, 580, 72, theme.backInk);
+    ctx.font = "800 36px 'Baloo 2', 'Trebuchet MS', sans-serif";
+    ctx.fillText(theme.label, FACE_W / 2, FACE_H / 2 - 10);
+    ctx.font = "700 16px 'Baloo 2', 'Trebuchet MS', sans-serif";
+    ctx.fillText(theme.name, FACE_W / 2, FACE_H / 2 + 24);
+    drawIcon(ctx, theme.icon, FACE_W / 2, 80, 40, theme.backInk);
+    drawIcon(ctx, theme.icon, FACE_W / 2, FACE_H - 72, 32, theme.backInk);
   });
 }
 
