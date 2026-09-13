@@ -338,6 +338,12 @@ export class SkipCountGame {
       view.group.position.copy(this.poseFor(card.id));
       view.flipper.rotation.x = Math.PI;
     });
+    this.state.waste.forEach((card) => {
+      const view = this.cards.get(card.id);
+      if (!view) return;
+      view.group.position.copy(this.poseFor(card.id));
+      view.flipper.rotation.x = card.faceUp ? 0 : Math.PI;
+    });
     this.busy = true;
     let delay = 0;
     const queue = this.state.tableau.flat();
@@ -934,7 +940,7 @@ export class SkipCountGame {
         face.emissiveIntensity = 0.7;
       } else if (kingHint) {
         face.emissive = new THREE.Color(this.theme.glow);
-        face.emissiveIntensity = 0.48;
+        face.emissiveIntensity = 0.72;
       } else if (ready) {
         face.emissive = new THREE.Color(this.theme.accent2);
         face.emissiveIntensity = boost ? 0.85 : 0.42;
@@ -951,10 +957,10 @@ export class SkipCountGame {
     this.tableauPads.forEach((pad, index) => {
       const mat = pad.material as THREE.MeshStandardMaterial;
       if (hinted.has(index)) {
-        mat.color.set(this.theme.accent);
+        mat.color.set(this.theme.accent2);
         mat.emissive = new THREE.Color(this.theme.glow);
-        mat.emissiveIntensity = 0.22 + pulse * 0.28;
-        mat.opacity = 0.28 + pulse * 0.18;
+        mat.emissiveIntensity = 0.4 + pulse * 0.35;
+        mat.opacity = 0.42 + pulse * 0.22;
       } else {
         mat.color.set(0xff8ad8);
         mat.emissive = new THREE.Color("#000000");
@@ -998,7 +1004,7 @@ export class SkipCountGame {
     const face = view ? (view.mesh.material as THREE.MeshStandardMaterial[])[4] : undefined;
     if (face && this.selectedId !== hint.wasteId) {
       face.emissive = new THREE.Color(this.theme.glow);
-      face.emissiveIntensity = 0.32 + pulse * 0.28;
+      face.emissiveIntensity = 0.55 + pulse * 0.4;
     }
     this.glowEmptyPads(hint.columns, pulse);
   }
