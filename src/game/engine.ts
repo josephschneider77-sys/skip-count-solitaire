@@ -396,8 +396,8 @@ export class SkipCountGame {
 
   private boardBounds(): THREE.Box3 {
     const box = new THREE.Box3();
-    const hx = CARD_W * 0.72;
-    const hy = CARD_H * 0.62;
+    const hx = CARD_W * 0.6;
+    const hy = CARD_H * 0.55;
     const maxCascade = this.state
       ? Math.max(7, ...this.state.tableau.map((col) => col.length + 1))
       : 7;
@@ -426,9 +426,9 @@ export class SkipCountGame {
     const hintH = hint instanceof HTMLElement && !hint.hidden ? hint.getBoundingClientRect().height + 14 : 16;
     const aspect = width / height;
     return {
-      side: aspect < 0.75 ? 0.14 : 0.09,
-      top: (hudH / height) * 2 + 0.1,
-      bottom: (hintH / height) * 2 + 0.09,
+      side: aspect < 0.75 ? 0.1 : 0.08,
+      top: (hudH / height) * 2 + 0.08,
+      bottom: (hintH / height) * 2 + 0.08,
     };
   }
 
@@ -460,14 +460,19 @@ export class SkipCountGame {
   private fitCamera(): void {
     const aspect = this.canvas.clientWidth / Math.max(1, this.canvas.clientHeight);
     this.camera.aspect = aspect || 1;
-    this.camera.fov = aspect < 0.7 ? 52 : aspect < 1 ? 46 : 38;
+    this.camera.fov = aspect < 0.7 ? 48 : aspect < 1 ? 44 : 38;
     const box = this.boardBounds();
     const center = box.getCenter(new THREE.Vector3());
-    const look = new THREE.Vector3(center.x, Math.max(0.45, center.y * 0.55), center.z);
-    const direction = new THREE.Vector3(0, 0.58, 1).normalize();
+    const look = new THREE.Vector3(center.x, Math.max(0.4, center.y * 0.5), center.z);
+    const direction =
+      aspect < 0.75
+        ? new THREE.Vector3(0, 1.15, 0.72).normalize()
+        : aspect < 1
+          ? new THREE.Vector3(0, 0.82, 0.9).normalize()
+          : new THREE.Vector3(0, 0.58, 1).normalize();
     const { side, top, bottom } = this.ndcMargins();
     let near = 6;
-    let far = 56;
+    let far = 48;
     for (let i = 0; i < 18; i += 1) {
       const mid = (near + far) / 2;
       this.camera.position.copy(look).addScaledVector(direction, mid);
@@ -477,7 +482,7 @@ export class SkipCountGame {
       if (this.boxFitsInView(box, side, top, bottom)) far = mid;
       else near = mid;
     }
-    const pad = this.camera.aspect < 0.75 ? 1.16 : 1.06;
+    const pad = this.camera.aspect < 0.75 ? 1.08 : 1.04;
     this.camera.position.copy(look).addScaledVector(direction, far * pad);
     this.camera.lookAt(look);
     this.camera.updateProjectionMatrix();
