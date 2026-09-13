@@ -233,7 +233,7 @@ function makeTexture(draw: (ctx: CanvasRenderingContext2D) => void): THREE.Canva
 }
 
 export function makeFaceTexture(theme: DeckTheme, value: number, suit: Suit): THREE.CanvasTexture {
-  const suitInk = SUIT_COLOR[suit] === "red" ? "#e11d74" : "#3a1848";
+  const suitInk = SUIT_COLOR[suit] === "red" ? "#d10f3a" : "#1a1020";
   const glyph = SUIT_GLYPH[suit];
   return makeTexture((ctx) => {
     ctx.fillStyle = theme.face;

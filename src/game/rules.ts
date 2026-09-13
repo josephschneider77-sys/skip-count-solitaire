@@ -139,7 +139,7 @@ export function canPlayToFoundation(state: GameState, card: CardModel): boolean 
 }
 
 export function canPlaceOnCard(state: GameState, moving: CardModel, dest: CardModel): boolean {
-  return dest.value - moving.value === state.multiplier && SUIT_COLOR[dest.suit] !== SUIT_COLOR[moving.suit];
+  return dest.value - moving.value === state.multiplier;
 }
 
 export function canStackOnTableau(state: GameState, moving: CardModel, column: number): boolean {
