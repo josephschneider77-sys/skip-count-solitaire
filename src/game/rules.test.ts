@@ -10,6 +10,8 @@ import {
   drawFromStock,
   isWon,
   multiplesUpTo,
+  playToTableau,
+  playableWasteId,
   removeRun,
   runFrom,
 } from "./rules.ts";
@@ -92,5 +94,25 @@ assert.equal(moved.length, 2);
 assert.equal(runState.tableau[1]?.length, 0);
 
 assert.equal(isWon(dealKlondike(10, rngFrom(3))), false);
+
+const wastePlay = dealKlondike(2, rngFrom(4));
+const wasteEight = { id: "waste-8", value: 8, multiplier: 2, suit: "spades" as const, faceUp: true };
+const buriedWaste = { id: "waste-old", value: 12, multiplier: 2, suit: "hearts" as const, faceUp: true };
+wastePlay.waste = [buriedWaste, wasteEight];
+wastePlay.tableau[2] = [{ id: "tab-10", value: 10, multiplier: 2, suit: "hearts", faceUp: true }];
+assert.equal(playableWasteId(wastePlay), "waste-8");
+assert.ok(runFrom(wastePlay, "waste-8"));
+assert.equal(runFrom(wastePlay, "waste-old"), null);
+assert.equal(canStackOnTableau(wastePlay, wasteEight, 2), true);
+assert.equal(playToTableau(wastePlay, "waste-8", 2), true);
+assert.equal(wastePlay.waste.at(-1)?.id, "waste-old");
+assert.equal(wastePlay.tableau[2]?.at(-1)?.id, "waste-8");
+assert.equal(playToTableau(wastePlay, "waste-old", 2), false);
+
+const emptyKing = dealKlondike(2, rngFrom(5));
+emptyKing.tableau[3] = [];
+emptyKing.waste = [{ id: "king-26", value: 26, multiplier: 2, suit: "diamonds", faceUp: true }];
+assert.equal(playToTableau(emptyKing, "king-26", 3), true);
+assert.equal(emptyKing.tableau[3]?.[0]?.value, 26);
 
 console.log("rules tests passed");

@@ -12,6 +12,7 @@ import {
   isTopWasteOrTableau,
   isWon,
   playableFoundationIds,
+  playableWasteId,
   removeRun,
   runFrom,
   suitIndex,
@@ -20,7 +21,17 @@ import {
 } from "./rules";
 import { themeFor, type DeckTheme } from "./themes";
 import { edgeMaterial, makeBackTexture, makeFaceTexture, makePadTexture, makeTableTexture } from "./textures";
-import { CARD_D, CARD_H, CARD_LEAN, CARD_W, columnX, layoutForAspect, ndcSideMargin, type LayoutMetrics } from "./layout";
+import {
+  CARD_D,
+  CARD_H,
+  CARD_LEAN,
+  CARD_W,
+  cameraDirection,
+  columnX,
+  layoutForAspect,
+  ndcSideMargin,
+  type LayoutMetrics,
+} from "./layout";
 
 type CardView = {
   model: CardModel;
@@ -520,13 +531,9 @@ export class SkipCountGame {
     const box = this.boardBounds();
     const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
-    const look = new THREE.Vector3(center.x, 0.2, center.z);
-    const direction =
-      aspect < 0.75
-        ? new THREE.Vector3(0, 1.08, 0.62).normalize()
-        : aspect < 1
-          ? new THREE.Vector3(0, 0.82, 0.88).normalize()
-          : new THREE.Vector3(0, 0.58, 1).normalize();
+    const look = new THREE.Vector3(center.x, 0.55, center.z);
+    const aim = cameraDirection(aspect);
+    const direction = new THREE.Vector3(aim.x, aim.y, aim.z);
     const { side, top, bottom } = this.ndcMargins();
     const vFov = THREE.MathUtils.degToRad(this.camera.fov);
     const hFov = 2 * Math.atan(Math.tan(vFov / 2) * Math.max(aspect, 0.01));
@@ -598,6 +605,28 @@ export class SkipCountGame {
     });
   }
 
+  private pickPointerObject(hits: THREE.Intersection[]): THREE.Object3D | null {
+    if (!this.state || hits.length === 0) return null;
+    const nearest = hits[0]?.distance ?? 0;
+    const scored = hits
+      .filter((hit) => hit.distance <= nearest + 0.55)
+      .map((hit) => {
+        const object = hit.object;
+        const pad = object.userData.pad as string | undefined;
+        const id = object.userData.cardId as string | undefined;
+        const loc = id ? findCard(this.state!, id) : null;
+        let score = 0;
+        if (loc?.pile === "waste" || pad === "waste") score = 100;
+        else if (loc?.pile === "tableau") score = 80;
+        else if (pad === "tableau") score = 50;
+        else if (loc?.pile === "foundation" || pad === "foundation") score = 40;
+        else if (loc?.pile === "stock" || pad === "stock") score = 10;
+        return { object, score, distance: hit.distance };
+      });
+    scored.sort((a, b) => b.score - a.score || a.distance - b.distance);
+    return scored[0]?.object ?? null;
+  }
+
   private onPointer(event: PointerEvent): void {
     if (!this.state || this.busy) return;
     const rect = this.canvas.getBoundingClientRect();
@@ -605,11 +634,11 @@ export class SkipCountGame {
     this.pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     this.raycaster.setFromCamera(this.pointer, this.camera);
     const meshes = [...this.cards.values()].map((view) => view.mesh);
-    const pads = [this.stockPad, ...this.foundationPads, ...this.tableauPads].filter((mesh): mesh is THREE.Mesh =>
-      Boolean(mesh),
+    const pads = [this.stockPad, this.wastePad, ...this.foundationPads, ...this.tableauPads].filter(
+      (mesh): mesh is THREE.Mesh => Boolean(mesh),
     );
     const hits = this.raycaster.intersectObjects([...meshes, ...pads], false);
-    const first = hits[0]?.object;
+    const first = this.pickPointerObject(hits);
     if (!first) {
       this.selectedId = null;
       this.syncHighlights();
@@ -617,6 +646,11 @@ export class SkipCountGame {
     }
     if (first.userData.pad === "stock") {
       this.drawCard();
+      return;
+    }
+    if (first.userData.pad === "waste") {
+      const wasteId = playableWasteId(this.state);
+      if (wasteId) this.onCardTapped(wasteId);
       return;
     }
     if (first.userData.pad === "foundation") {
@@ -635,6 +669,11 @@ export class SkipCountGame {
       this.drawCard();
       return;
     }
+    if (loc.pile === "waste") {
+      const wasteId = playableWasteId(this.state);
+      if (wasteId) this.onCardTapped(wasteId);
+      return;
+    }
     if (loc.pile === "foundation") {
       this.tryFoundation(loc.column);
       return;
@@ -649,11 +688,11 @@ export class SkipCountGame {
     const card = loc.pile === "waste" ? this.state.waste[loc.index] : this.state.tableau[loc.column ?? 0]?.[loc.index];
     if (!card?.faceUp) return;
 
-    if (this.selectedId && this.selectedId !== id && loc.pile === "tableau" && loc.column !== undefined) {
+    if (loc.pile === "tableau" && loc.column !== undefined) {
       if (this.tryTableauMove(loc.column)) return;
     }
 
-    if (isTopWasteOrTableau(this.state, id) && canPlayToFoundation(this.state, card)) {
+    if (loc.pile !== "waste" && isTopWasteOrTableau(this.state, id) && canPlayToFoundation(this.state, card)) {
       this.moveToFoundation(id);
       return;
     }
@@ -669,9 +708,14 @@ export class SkipCountGame {
     this.syncHighlights();
   }
 
+  private movingId(): string | undefined {
+    if (!this.state) return undefined;
+    return this.selectedId ?? playableWasteId(this.state);
+  }
+
   private tryFoundation(column?: number): void {
     if (!this.state) return;
-    const id = this.selectedId ?? this.state.waste[this.state.waste.length - 1]?.id;
+    const id = this.movingId();
     if (!id) return;
     const run = runFrom(this.state, id);
     if (!run || run.length !== 1) return;
@@ -682,10 +726,14 @@ export class SkipCountGame {
   }
 
   private tryTableauMove(column: number): boolean {
-    if (!this.state || !this.selectedId) return false;
-    const run = runFrom(this.state, this.selectedId);
+    if (!this.state) return false;
+    const id = this.movingId();
+    if (!id) return false;
+    const loc = findCard(this.state, id);
+    if (loc?.pile === "tableau" && loc.column === column) return false;
+    const run = runFrom(this.state, id);
     if (!run || !run[0] || !canStackOnTableau(this.state, run[0], column)) return false;
-    this.moveRunToTableau(this.selectedId, column);
+    this.moveRunToTableau(id, column);
     return true;
   }
 
