@@ -6,7 +6,7 @@ import {
   canAutoHome,
   canPlayToFoundation,
   canStackOnTableau,
-  dealKlondike,
+  autoHomeAll,
   drawFromStock,
   emptyColumnHint,
   findCard,
@@ -22,6 +22,7 @@ import {
   type GameState,
 } from "./rules";
 import { restoreState, snapshotState, type GameSnap } from "./history";
+import { dealSolvable } from "./solver";
 import { themeFor, type DeckTheme } from "./themes";
 import { edgeMaterial, makeBackTexture, makeFaceTexture, makeHaloTexture, makePadTexture, makeTableTexture } from "./textures";
 import {
@@ -311,10 +312,10 @@ export class SkipCountGame {
     this.undos = [];
     this.lastTap = null;
     this.clearCards();
-    this.state = dealKlondike(multiplier);
+    this.state = dealSolvable(multiplier);
     if (import.meta.env.DEV) {
       const demo = new URLSearchParams(window.location.search);
-      if (demo.get("glow") === "1") this.arrangeEmptyKingDemo();
+      if (demo.get("glow") === "1") this.arrangeEmptyWasteDemo();
       if (demo.get("home") === "1") this.arrangeHomeableDemo();
     }
     this.refreshPads();
@@ -406,15 +407,11 @@ export class SkipCountGame {
       view.group.position.copy(this.stockOrigin());
       view.flipper.rotation.x = Math.PI;
       this.animateTo(view, this.poseFor(card.id), card.faceUp ? 0 : Math.PI, 0.32, delay, () => {
-        if (index === queue.length - 1) {
-          this.busy = false;
-          this.fitCamera();
-          this.syncHighlights();
-        }
+        if (index === queue.length - 1) this.flushAutoHomes();
       });
       delay += 0.028;
     });
-    if (queue.length === 0) this.busy = false;
+    if (queue.length === 0) this.flushAutoHomes();
   }
 
   private layout(): LayoutMetrics {
@@ -832,46 +829,47 @@ export class SkipCountGame {
         view.group.position.copy(this.poseFor(card.id));
         view.flipper.rotation.x = Math.PI;
       });
-      this.syncHud();
-      this.syncHighlights();
+      this.flushAutoHomes();
       return;
     }
     const card = this.state.waste[this.state.waste.length - 1];
     const view = card ? this.cards.get(card.id) : undefined;
-    if (!card || !view) return;
+    if (!card || !view) {
+      this.flushAutoHomes();
+      return;
+    }
     this.busy = true;
-    this.animateTo(view, this.poseFor(card.id), 0, 0.36, 0, () => {
-      this.busy = false;
-      this.syncHud();
-      this.syncHighlights();
+    this.animateTo(view, this.poseFor(card.id), 0, 0.28, 0, () => {
+      this.flushAutoHomes();
     });
     this.syncHud();
   }
 
-  private moveToFoundation(id: string): void {
+  private moveToFoundation(id: string, recordUndo = true, animated = 0): void {
     if (!this.state) return;
-    this.pushUndo();
+    if (recordUndo) this.pushUndo();
     const run = removeRun(this.state, id);
     const card = run[0];
     if (!card || run.length !== 1) {
-      this.undos.pop();
-      this.syncUndoButton();
+      if (recordUndo) {
+        this.undos.pop();
+        this.syncUndoButton();
+      }
+      this.flushAutoHomes(animated);
       return;
     }
     this.state.foundations[suitIndex(card.suit)]?.push(card);
     const view = this.cards.get(card.id);
-    if (!view) return;
+    if (!view) {
+      this.flushAutoHomes(animated + 1);
+      return;
+    }
     this.busy = true;
     this.selectedId = null;
-    this.sfx.place();
+    if (recordUndo || animated === 0) this.sfx.place();
     this.relayoutExposed();
-    this.animateTo(view, this.poseFor(card.id), 0, 0.34, 0, () => {
-      this.busy = false;
-      this.fitCamera();
-      this.refreshPads();
-      this.syncHud();
-      this.syncHighlights();
-      this.checkWin();
+    this.animateTo(view, this.poseFor(card.id), 0, 0.2, 0, () => {
+      this.flushAutoHomes(recordUndo ? 0 : animated + 1);
     });
     this.refreshPads();
     this.syncHud();
@@ -892,21 +890,46 @@ export class SkipCountGame {
     this.sfx.place();
     this.relayoutExposed();
     let left = run.length;
+    const finish = (): void => {
+      left -= 1;
+      if (left <= 0) this.flushAutoHomes();
+    };
     run.forEach((card, i) => {
       const view = this.cards.get(card.id);
       if (!view) {
-        left -= 1;
+        finish();
         return;
       }
-      this.animateTo(view, this.poseFor(card.id), 0, 0.3, i * 0.03, () => {
-        left -= 1;
-        if (left <= 0) {
-          this.busy = false;
-          this.fitCamera();
-          this.syncHighlights();
-        }
-      });
+      this.animateTo(view, this.poseFor(card.id), 0, 0.26, i * 0.03, finish);
     });
+    if (run.length === 0) this.flushAutoHomes();
+  }
+
+  /** Auto-send every legal home card; skips Undo so one user action reverts the whole cascade. */
+  private flushAutoHomes(animated = 0): void {
+    if (!this.state) return;
+    const next = playableFoundationIds(this.state)[0];
+    if (!next) {
+      this.busy = false;
+      this.fitCamera();
+      this.refreshPads();
+      this.syncHud();
+      this.syncHighlights();
+      this.checkWin();
+      return;
+    }
+    if (animated >= 8) {
+      autoHomeAll(this.state);
+      this.snapAllCards();
+      this.busy = false;
+      this.fitCamera();
+      this.refreshPads();
+      this.syncHud();
+      this.syncHighlights();
+      this.checkWin();
+      return;
+    }
+    this.moveToFoundation(next, false, animated);
   }
 
   private relayoutExposed(): void {
@@ -987,10 +1010,10 @@ export class SkipCountGame {
     const home = foundationCount(this.state);
     setText("#hud-level", String(this.state.multiplier));
     setText("#hud-next", String(home));
-    setText("#hud-empty", String(this.state.highest));
+    setText("#hud-empty", "Any card");
     const hint = document.querySelector("#hint-line");
     if (hint) {
-      hint.textContent = `Draw. Homes ${this.state.lowest}→${this.state.highest} by ${this.state.multiplier}s. Stack down by ${this.state.multiplier}s. Empty wants ${this.state.highest}.`;
+      hint.textContent = `Draw. Homes ${this.state.lowest}→${this.state.highest} by ${this.state.multiplier}s. Stack down by ${this.state.multiplier}s. Empty spots take any card.`;
     }
   }
 
@@ -1005,12 +1028,12 @@ export class SkipCountGame {
       const face = mats[4];
       if (!face) return;
       const selected = selectedRun.has(id);
-      const kingHint = emptyHint?.wasteId === id;
+      const wasteEmptyHint = emptyHint?.wasteId === id;
       const ready = playable.has(id);
       if (selected) {
         face.emissive = new THREE.Color(this.theme.glow);
         face.emissiveIntensity = 0.7;
-      } else if (kingHint) {
+      } else if (wasteEmptyHint) {
         face.emissive = new THREE.Color(this.theme.glow);
         face.emissiveIntensity = 0.72;
       } else if (ready) {
@@ -1061,11 +1084,11 @@ export class SkipCountGame {
     }
   }
 
-  private arrangeEmptyKingDemo(): void {
+  private arrangeEmptyWasteDemo(): void {
     if (!this.state) return;
-    const king = this.allCards(this.state).find((card) => card.value === this.state!.highest);
-    if (!king) return;
-    const loc = findCard(this.state, king.id);
+    const spare = this.allCards(this.state).find((card) => card.value !== this.state!.lowest);
+    if (!spare) return;
+    const loc = findCard(this.state, spare.id);
     if (!loc) return;
     if (loc.pile === "stock") this.state.stock.splice(loc.index, 1);
     else if (loc.pile === "waste") this.state.waste.splice(loc.index, 1);
@@ -1074,8 +1097,8 @@ export class SkipCountGame {
     } else if (loc.pile === "tableau" && loc.column !== undefined) {
       this.state.tableau[loc.column]?.splice(loc.index, 1);
     }
-    king.faceUp = true;
-    this.state.waste.push(king);
+    spare.faceUp = true;
+    this.state.waste.push(spare);
     const first = this.state.tableau[0];
     if (!first) return;
     while (first.length > 0) {
