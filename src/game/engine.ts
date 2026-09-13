@@ -307,7 +307,7 @@ export class SkipCountGame {
     setHidden("#hint-line", true);
   }
 
-  private startLevel(multiplier: number): void {
+  private async startLevel(multiplier: number): Promise<void> {
     this.sfx.select();
     setHidden("#title-screen", true);
     setHidden("#win-screen", true);
@@ -332,8 +332,24 @@ export class SkipCountGame {
     });
     this.syncHud();
     this.syncUndoButton();
+    await this.readyCardFonts();
     this.buildCards();
     this.dealIntro();
+  }
+
+  private async readyCardFonts(): Promise<void> {
+    const fonts = document.fonts;
+    if (!fonts?.load) return;
+    try {
+      await Promise.race([
+        Promise.all([fonts.load("900 64px 'Baloo 2'"), fonts.load("800 48px 'Baloo 2'")]),
+        new Promise<void>((resolve) => {
+          window.setTimeout(resolve, 800);
+        }),
+      ]);
+    } catch {
+      // Trebuchet fallback still measures and fits inside the rank badge.
+    }
   }
 
   private clearCards(): void {
