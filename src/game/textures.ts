@@ -386,3 +386,22 @@ export function makePadTexture(title: string, subtitle: string, theme: DeckTheme
   texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
 }
+
+/** Soft pink-gold bloom used to hint a waste king into an empty column. */
+export function makeHaloTexture(theme: DeckTheme): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 256;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Could not make halo art");
+  const glow = ctx.createRadialGradient(128, 128, 12, 128, 128, 124);
+  glow.addColorStop(0, "#fff7c8");
+  glow.addColorStop(0.28, theme.accent2);
+  glow.addColorStop(0.62, theme.glow);
+  glow.addColorStop(1, "rgba(255, 255, 255, 0)");
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, 256, 256);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}

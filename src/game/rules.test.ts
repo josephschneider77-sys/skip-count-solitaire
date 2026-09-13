@@ -2,15 +2,22 @@ import assert from "node:assert/strict";
 import {
   SUITS,
   buildDeck,
+  canAutoHome,
   canPlaceOnCard,
   canPlayToFoundation,
   canStackOnTableau,
+  DOUBLE_TAP_MS,
   dealKlondike,
   deckSize,
   drawFromStock,
+  emptyColumnHint,
+  emptyTableauColumns,
+  isDoubleTap,
   isWon,
   multiplesUpTo,
+  playToFoundation,
   playToTableau,
+  highestMultiple,
   playableWasteId,
   removeRun,
   runFrom,
@@ -37,6 +44,8 @@ assert.equal(multiplesUpTo(9).at(-1), 117);
 assert.equal(multiplesUpTo(10).at(-1), 130);
 
 for (let level = 2; level <= 10; level += 1) {
+  assert.equal(highestMultiple(level), level * 13);
+  assert.equal(multiplesUpTo(level).at(-1), level * 13);
   assert.equal(multiplesUpTo(level).length, 13);
   assert.equal(deckSize(level), 52);
   assert.equal(buildDeck(level).length, 52);
@@ -65,6 +74,13 @@ assert.equal(dealt.highest, 91);
 const ace = { id: "a", value: 7, multiplier: 7, suit: SUITS[0], faceUp: true } as const;
 assert.equal(canPlayToFoundation(dealt, { ...ace }), true);
 assert.equal(canPlayToFoundation(dealt, { ...ace, value: 14 }), false);
+
+assert.equal(DOUBLE_TAP_MS >= 300 && DOUBLE_TAP_MS <= 400, true);
+assert.equal(isDoubleTap(null, "c1", 100), false);
+assert.equal(isDoubleTap({ id: "c1", time: 0 }, "c1", 360), true);
+assert.equal(isDoubleTap({ id: "c1", time: 0 }, "c1", 361), false);
+assert.equal(isDoubleTap({ id: "c1", time: 0 }, "c2", 100), false);
+assert.equal(isDoubleTap({ id: "c1", time: 50 }, "c1", 40), false);
 
 const redTen = { id: "r10", value: 10, multiplier: 2, suit: "hearts" as const, faceUp: true };
 const blackEight = { id: "b8", value: 8, multiplier: 2, suit: "spades" as const, faceUp: true };
@@ -118,8 +134,83 @@ assert.equal(playToTableau(wastePlay, "waste-old", 2), false);
 const emptyKing = dealKlondike(2, rngFrom(5));
 emptyKing.tableau[3] = [];
 emptyKing.waste = [{ id: "king-26", value: 26, multiplier: 2, suit: "diamonds", faceUp: true }];
+assert.equal(canStackOnTableau(emptyKing, emptyKing.waste[0]!, 3), true);
 assert.equal(playToTableau(emptyKing, "king-26", 3), true);
 assert.equal(emptyKing.tableau[3]?.[0]?.value, 26);
+
+const wasteNotKing = dealKlondike(2, rngFrom(15));
+wasteNotKing.tableau[0] = [];
+wasteNotKing.waste = [{ id: "waste-24", value: 24, multiplier: 2, suit: "clubs", faceUp: true }];
+assert.equal(canStackOnTableau(wasteNotKing, wasteNotKing.waste[0]!, 0), false);
+assert.equal(playToTableau(wasteNotKing, "waste-24", 0), false);
+assert.equal(wasteNotKing.waste.at(-1)?.id, "waste-24");
+assert.equal(wasteNotKing.tableau[0]?.length, 0);
+
+const tableauNotKing = dealKlondike(2, rngFrom(16));
+tableauNotKing.tableau[0] = [];
+tableauNotKing.tableau[1] = [
+  { id: "tab-24", value: 24, multiplier: 2, suit: "spades", faceUp: true },
+  { id: "tab-22", value: 22, multiplier: 2, suit: "hearts", faceUp: true },
+];
+assert.equal(canStackOnTableau(tableauNotKing, tableauNotKing.tableau[1]![0]!, 0), false);
+assert.equal(playToTableau(tableauNotKing, "tab-24", 0), false);
+assert.equal(tableauNotKing.tableau[0]?.length, 0);
+assert.equal(tableauNotKing.tableau[1]?.length, 2);
+
+const kingRun = dealKlondike(2, rngFrom(17));
+kingRun.tableau[0] = [];
+kingRun.tableau[1] = [
+  { id: "run-26", value: 26, multiplier: 2, suit: "spades", faceUp: true },
+  { id: "run-24", value: 24, multiplier: 2, suit: "hearts", faceUp: true },
+];
+assert.equal(canStackOnTableau(kingRun, kingRun.tableau[1]![0]!, 0), true);
+assert.equal(playToTableau(kingRun, "run-26", 0), true);
+assert.deepEqual(
+  kingRun.tableau[0]?.map((card) => card.value),
+  [26, 24],
+);
+
+const emptyLevel3 = dealKlondike(3, rngFrom(18));
+emptyLevel3.tableau[2] = [];
+assert.equal(emptyLevel3.highest, 39);
+assert.equal(
+  canStackOnTableau(emptyLevel3, { id: "k39", value: 39, multiplier: 3, suit: "hearts", faceUp: true }, 2),
+  true,
+);
+assert.equal(
+  canStackOnTableau(emptyLevel3, { id: "k36", value: 36, multiplier: 3, suit: "hearts", faceUp: true }, 2),
+  false,
+);
+
+const glowHint = dealKlondike(2, rngFrom(19));
+glowHint.tableau[0] = [];
+glowHint.waste = [{ id: "glow-26", value: 26, multiplier: 2, suit: "hearts", faceUp: true }];
+assert.deepEqual(emptyTableauColumns(glowHint), [0]);
+assert.deepEqual(emptyColumnHint(glowHint), { wasteId: "glow-26", columns: [0] });
+glowHint.waste = [{ id: "glow-24", value: 24, multiplier: 2, suit: "hearts", faceUp: true }];
+assert.equal(emptyColumnHint(glowHint), null);
+glowHint.waste = [{ id: "glow-26b", value: 26, multiplier: 2, suit: "spades", faceUp: true }];
+glowHint.tableau[0] = [{ id: "blocker", value: 8, multiplier: 2, suit: "clubs", faceUp: true }];
+assert.equal(emptyColumnHint(glowHint), null);
+glowHint.tableau[0] = [];
+glowHint.stock = [{ id: "next-draw", value: 4, multiplier: 2, suit: "diamonds", faceUp: false }];
+assert.ok(emptyColumnHint(glowHint));
+assert.equal(drawFromStock(glowHint), "draw");
+assert.equal(glowHint.waste.at(-1)?.id, "next-draw");
+assert.equal(emptyColumnHint(glowHint), null, "hint stops when the waste top is no longer the highest");
+
+const glowPlayed = dealKlondike(2, rngFrom(20));
+glowPlayed.tableau[6] = [];
+glowPlayed.waste = [{ id: "play-26", value: 26, multiplier: 2, suit: "clubs", faceUp: true }];
+assert.ok(emptyColumnHint(glowPlayed));
+assert.equal(playToTableau(glowPlayed, "play-26", 6), true);
+assert.equal(emptyColumnHint(glowPlayed), null, "hint stops after the king fills the empty column");
+
+const glowLevel3 = dealKlondike(3, rngFrom(21));
+glowLevel3.tableau[1] = [];
+glowLevel3.tableau[4] = [];
+glowLevel3.waste = [{ id: "glow-39", value: 39, multiplier: 3, suit: "diamonds", faceUp: true }];
+assert.deepEqual(emptyColumnHint(glowLevel3), { wasteId: "glow-39", columns: [1, 4] });
 
 const heartsPlay = dealKlondike(2, rngFrom(6));
 heartsPlay.waste = [{ id: "waste-2h", value: 2, multiplier: 2, suit: "hearts", faceUp: true }];
@@ -143,5 +234,34 @@ assert.deepEqual(
   sameSuitRun.tableau[6]?.map((card) => card.id),
   ["run-6h", "run-4h", "run-2h"],
 );
+
+const autoWaste = dealKlondike(2, rngFrom(30));
+const wasteTwo = { id: "home-2d", value: 2, multiplier: 2, suit: "diamonds" as const, faceUp: true };
+autoWaste.waste = [wasteTwo];
+assert.equal(canAutoHome(autoWaste, "home-2d"), true);
+assert.equal(playToFoundation(autoWaste, "home-2d"), true);
+assert.equal(autoWaste.waste.length, 0);
+assert.equal(autoWaste.foundations[1]?.at(-1)?.id, "home-2d");
+assert.equal(canAutoHome(autoWaste, "home-2d"), false);
+
+const wasteFour = dealKlondike(2, rngFrom(31));
+wasteFour.waste = [{ id: "home-4s", value: 4, multiplier: 2, suit: "spades", faceUp: true }];
+assert.equal(canAutoHome(wasteFour, "home-4s"), false);
+assert.equal(playToFoundation(wasteFour, "home-4s"), false);
+wasteFour.foundations[3] = [{ id: "home-2s", value: 2, multiplier: 2, suit: "spades", faceUp: true }];
+assert.equal(canAutoHome(wasteFour, "home-4s"), true);
+assert.equal(playToFoundation(wasteFour, "home-4s"), true);
+assert.equal(wasteFour.foundations[3]?.at(-1)?.id, "home-4s");
+
+const tabHome = dealKlondike(2, rngFrom(32));
+tabHome.tableau[2] = [
+  { id: "buried-8", value: 8, multiplier: 2, suit: "clubs", faceUp: true },
+  { id: "tab-2c", value: 2, multiplier: 2, suit: "clubs", faceUp: true },
+];
+assert.equal(canAutoHome(tabHome, "buried-8"), false);
+assert.equal(canAutoHome(tabHome, "tab-2c"), true);
+assert.equal(playToFoundation(tabHome, "tab-2c"), true);
+assert.equal(tabHome.tableau[2]?.at(-1)?.id, "buried-8");
+assert.equal(tabHome.foundations[2]?.at(-1)?.id, "tab-2c");
 
 console.log("rules tests passed");

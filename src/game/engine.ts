@@ -3,13 +3,15 @@ import { Sfx } from "./audio";
 import {
   SUIT_GLYPH,
   SUITS,
+  canAutoHome,
   canPlayToFoundation,
   canStackOnTableau,
   dealKlondike,
   drawFromStock,
+  emptyColumnHint,
   findCard,
   foundationCount,
-  isTopWasteOrTableau,
+  isDoubleTap,
   isWon,
   playableFoundationIds,
   playableWasteId,
@@ -19,8 +21,9 @@ import {
   type CardModel,
   type GameState,
 } from "./rules";
+import { restoreState, snapshotState, type GameSnap } from "./history";
 import { themeFor, type DeckTheme } from "./themes";
-import { edgeMaterial, makeBackTexture, makeFaceTexture, makePadTexture, makeTableTexture } from "./textures";
+import { edgeMaterial, makeBackTexture, makeFaceTexture, makeHaloTexture, makePadTexture, makeTableTexture } from "./textures";
 import {
   CARD_D,
   CARD_H,
@@ -82,6 +85,8 @@ export class SkipCountGame {
   private wastePad: THREE.Mesh | null = null;
   private foundationPads: THREE.Mesh[] = [];
   private tableauPads: THREE.Mesh[] = [];
+  private emptyHalos: THREE.Mesh[] = [];
+  private wasteHalo: THREE.Mesh | null = null;
 
   private state: GameState | null = null;
   private theme: DeckTheme = themeFor(2);
@@ -89,6 +94,8 @@ export class SkipCountGame {
   private busy = false;
   private particles: THREE.Points | null = null;
   private hintUntil = 0;
+  private undos: GameSnap[] = [];
+  private lastTap: { id: string; time: number } | null = null;
 
   mount(): void {
     this.setupRenderer();
@@ -102,6 +109,31 @@ export class SkipCountGame {
     this.canvas.addEventListener("pointerdown", (event) => this.onPointer(event));
     this.resize();
     this.renderer.setAnimationLoop(() => this.tick());
+    if (import.meta.env.DEV) {
+      Object.assign(window, {
+        __scsTap: (id: string) => this.onCardTapped(id),
+        __scsWaste: () => (this.state ? playableWasteId(this.state) : undefined),
+        __scsHomeable: () => (this.state ? playableFoundationIds(this.state) : []),
+        __scsDebugDouble: (id: string) => {
+          if (!this.state) return { error: "no state" };
+          const before = {
+            last: this.lastTap,
+            canHome: canAutoHome(this.state, id),
+            busy: this.busy,
+            waste: this.state.waste.map((card) => card.id),
+          };
+          this.onCardTapped(id);
+          const mid = { last: this.lastTap, selected: this.selectedId, busy: this.busy };
+          this.onCardTapped(id);
+          return {
+            before,
+            mid,
+            homes: foundationCount(this.state),
+            waste: this.state.waste.map((card) => card.id),
+          };
+        },
+      });
+    }
   }
 
   private setupRenderer(): void {
@@ -185,8 +217,28 @@ export class SkipCountGame {
       });
       this.scene.add(pad);
       this.tableauPads.push(pad);
+      this.emptyHalos.push(this.makeHalo());
     }
+    this.wasteHalo = this.makeHalo(1.85);
     this.placePads();
+  }
+
+  private makeHalo(scale = 1.55): THREE.Mesh {
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(CARD_W * scale, CARD_H * scale),
+      new THREE.MeshBasicMaterial({
+        map: makeHaloTexture(this.theme),
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+        toneMapped: false,
+      }),
+    );
+    mesh.rotation.x = CARD_LEAN;
+    mesh.raycast = () => {};
+    mesh.visible = false;
+    this.scene.add(mesh);
+    return mesh;
   }
 
   private setupParticles(): void {
@@ -219,6 +271,7 @@ export class SkipCountGame {
       }
     }
     document.querySelector("#btn-play")?.addEventListener("click", () => this.startLevel(2));
+    document.querySelector("#btn-undo")?.addEventListener("click", () => this.undoLast());
     document.querySelector("#btn-hint")?.addEventListener("click", () => this.showHint());
     document.querySelector("#btn-restart")?.addEventListener("click", () => {
       if (this.state) this.startLevel(this.state.multiplier);
@@ -238,6 +291,9 @@ export class SkipCountGame {
   private showTitle(): void {
     this.clearCards();
     this.state = null;
+    this.undos = [];
+    this.lastTap = null;
+    this.syncUndoButton();
     setHidden("#title-screen", false);
     setHidden("#win-screen", true);
     setHidden("#hud", true);
@@ -252,8 +308,15 @@ export class SkipCountGame {
     setHidden("#hint-line", false);
     this.theme = themeFor(multiplier);
     this.selectedId = null;
+    this.undos = [];
+    this.lastTap = null;
     this.clearCards();
     this.state = dealKlondike(multiplier);
+    if (import.meta.env.DEV) {
+      const demo = new URLSearchParams(window.location.search);
+      if (demo.get("glow") === "1") this.arrangeEmptyKingDemo();
+      if (demo.get("home") === "1") this.arrangeHomeableDemo();
+    }
     this.refreshPads();
     this.fitCamera();
     requestAnimationFrame(() => {
@@ -261,6 +324,7 @@ export class SkipCountGame {
       this.fitCamera();
     });
     this.syncHud();
+    this.syncUndoButton();
     this.buildCards();
     this.dealIntro();
   }
@@ -327,6 +391,12 @@ export class SkipCountGame {
       view.group.position.copy(this.poseFor(card.id));
       view.flipper.rotation.x = Math.PI;
     });
+    this.state.waste.forEach((card) => {
+      const view = this.cards.get(card.id);
+      if (!view) return;
+      view.group.position.copy(this.poseFor(card.id));
+      view.flipper.rotation.x = card.faceUp ? 0 : Math.PI;
+    });
     this.busy = true;
     let delay = 0;
     const queue = this.state.tableau.flat();
@@ -388,6 +458,12 @@ export class SkipCountGame {
     if (this.wastePad) this.wastePad.position.copy(this.wasteOrigin());
     this.foundationPads.forEach((pad, i) => pad.position.copy(this.foundationOrigin(i)));
     this.tableauPads.forEach((pad, i) => pad.position.copy(this.tableauOrigin(i, 0)));
+    if (this.wasteHalo) {
+      this.wasteHalo.position.copy(this.wasteOrigin()).setY(CARD_Y + 0.02);
+    }
+    this.emptyHalos.forEach((halo, i) => {
+      halo.position.copy(this.tableauOrigin(i, 0)).setY(CARD_Y + 0.02);
+    });
   }
 
   private refreshPads(): void {
@@ -411,6 +487,15 @@ export class SkipCountGame {
       mat.map = tex;
       mat.needsUpdate = true;
     });
+    const refreshHalo = (mesh: THREE.Mesh | null): void => {
+      if (!mesh) return;
+      const mat = mesh.material as THREE.MeshBasicMaterial;
+      mat.map?.dispose();
+      mat.map = makeHaloTexture(this.theme);
+      mat.needsUpdate = true;
+    };
+    this.emptyHalos.forEach((halo) => refreshHalo(halo));
+    refreshHalo(this.wasteHalo);
   }
 
   private poseFor(id: string): THREE.Vector3 {
@@ -676,13 +761,16 @@ export class SkipCountGame {
     const card = loc.pile === "waste" ? this.state.waste[loc.index] : this.state.tableau[loc.column ?? 0]?.[loc.index];
     if (!card?.faceUp) return;
 
+    const now = performance.now();
+    if (isDoubleTap(this.lastTap, id, now)) {
+      this.lastTap = { id, time: now };
+      if (canAutoHome(this.state, id)) this.moveToFoundation(id);
+      return;
+    }
+    this.lastTap = { id, time: now };
+
     if (loc.pile === "tableau" && loc.column !== undefined) {
       if (this.tryTableauMove(loc.column)) return;
-    }
-
-    if (loc.pile !== "waste" && isTopWasteOrTableau(this.state, id) && canPlayToFoundation(this.state, card)) {
-      this.moveToFoundation(id);
-      return;
     }
 
     const run = runFrom(this.state, id);
@@ -727,8 +815,14 @@ export class SkipCountGame {
 
   private drawCard(): void {
     if (!this.state || this.busy) return;
+    if (this.state.stock.length === 0 && this.state.waste.length === 0) return;
+    this.pushUndo();
     const result = drawFromStock(this.state);
-    if (result === "empty") return;
+    if (result === "empty") {
+      this.undos.pop();
+      this.syncUndoButton();
+      return;
+    }
     this.sfx.draw();
     this.selectedId = null;
     if (result === "recycle") {
@@ -756,9 +850,14 @@ export class SkipCountGame {
 
   private moveToFoundation(id: string): void {
     if (!this.state) return;
+    this.pushUndo();
     const run = removeRun(this.state, id);
     const card = run[0];
-    if (!card || run.length !== 1) return;
+    if (!card || run.length !== 1) {
+      this.undos.pop();
+      this.syncUndoButton();
+      return;
+    }
     this.state.foundations[suitIndex(card.suit)]?.push(card);
     const view = this.cards.get(card.id);
     if (!view) return;
@@ -780,8 +879,13 @@ export class SkipCountGame {
 
   private moveRunToTableau(id: string, column: number): void {
     if (!this.state) return;
+    this.pushUndo();
     const run = removeRun(this.state, id);
-    if (run.length === 0) return;
+    if (run.length === 0) {
+      this.undos.pop();
+      this.syncUndoButton();
+      return;
+    }
     this.state.tableau[column]?.push(...run);
     this.busy = true;
     this.selectedId = null;
@@ -840,12 +944,50 @@ export class SkipCountGame {
     setHidden("#win-screen", false);
   }
 
+  private pushUndo(): void {
+    if (!this.state) return;
+    this.undos.push(snapshotState(this.state));
+    this.syncUndoButton();
+  }
+
+  private undoLast(): void {
+    if (!this.state || this.undos.length === 0) return;
+    const snap = this.undos.pop();
+    if (!snap) return;
+    this.tweens.length = 0;
+    this.busy = false;
+    this.selectedId = null;
+    this.lastTap = null;
+    restoreState(this.state, snap);
+    this.snapAllCards();
+    this.refreshPads();
+    this.fitCamera();
+    this.syncHud();
+    this.syncHighlights();
+    this.syncUndoButton();
+    setHidden("#win-screen", true);
+    this.sfx.select();
+  }
+
+  private snapAllCards(): void {
+    this.placePads();
+    this.cards.forEach((view, id) => {
+      view.group.position.copy(this.poseFor(id));
+      view.flipper.rotation.x = view.model.faceUp ? 0 : Math.PI;
+    });
+  }
+
+  private syncUndoButton(): void {
+    const btn = document.querySelector<HTMLButtonElement>("#btn-undo");
+    if (btn) btn.disabled = this.undos.length === 0;
+  }
+
   private syncHud(): void {
     if (!this.state) return;
     const home = foundationCount(this.state);
     setText("#hud-level", String(this.state.multiplier));
     setText("#hud-next", String(home));
-    setText("#hud-theme", this.theme.label);
+    setText("#hud-empty", String(this.state.highest));
     const hint = document.querySelector("#hint-line");
     if (hint) {
       hint.textContent = `Draw. Homes ${this.state.lowest}→${this.state.highest} by ${this.state.multiplier}s. Stack down by ${this.state.multiplier}s. Empty wants ${this.state.highest}.`;
@@ -856,16 +998,133 @@ export class SkipCountGame {
     if (!this.state) return;
     const playable = new Set(playableFoundationIds(this.state));
     const selectedRun = this.selectedId ? new Set((runFrom(this.state, this.selectedId) ?? []).map((card) => card.id)) : new Set<string>();
+    const emptyHint = emptyColumnHint(this.state);
     const boost = performance.now() < this.hintUntil;
     this.cards.forEach((view, id) => {
       const mats = view.mesh.material as THREE.MeshStandardMaterial[];
       const face = mats[4];
       if (!face) return;
       const selected = selectedRun.has(id);
+      const kingHint = emptyHint?.wasteId === id;
       const ready = playable.has(id);
-      face.emissive = new THREE.Color(selected ? this.theme.glow : ready ? this.theme.accent2 : "#000000");
-      face.emissiveIntensity = selected ? 0.7 : ready ? (boost ? 0.85 : 0.42) : 0;
+      if (selected) {
+        face.emissive = new THREE.Color(this.theme.glow);
+        face.emissiveIntensity = 0.7;
+      } else if (kingHint) {
+        face.emissive = new THREE.Color(this.theme.glow);
+        face.emissiveIntensity = 0.72;
+      } else if (ready) {
+        face.emissive = new THREE.Color(this.theme.accent2);
+        face.emissiveIntensity = boost ? 0.85 : 0.42;
+      } else {
+        face.emissive = new THREE.Color("#000000");
+        face.emissiveIntensity = 0;
+      }
     });
+    this.glowEmptyPads(emptyHint?.columns ?? [], 0.4);
+  }
+
+  private glowEmptyPads(columns: number[], pulse: number): void {
+    const hinted = new Set(columns);
+    this.tableauPads.forEach((pad, index) => {
+      const mat = pad.material as THREE.MeshStandardMaterial;
+      if (hinted.has(index)) {
+        mat.color.set(this.theme.accent2);
+        mat.emissive = new THREE.Color(this.theme.glow);
+        mat.emissiveIntensity = 0.4 + pulse * 0.35;
+        mat.opacity = 0.42 + pulse * 0.22;
+      } else {
+        mat.color.set(0xff8ad8);
+        mat.emissive = new THREE.Color("#000000");
+        mat.emissiveIntensity = 0;
+        mat.opacity = 0.18;
+      }
+      this.setHalo(this.emptyHalos[index] ?? null, hinted.has(index), pulse);
+    });
+    this.setHalo(this.wasteHalo, columns.length > 0 && Boolean(this.state && emptyColumnHint(this.state)), pulse);
+  }
+
+  private setHalo(mesh: THREE.Mesh | null, on: boolean, pulse: number): void {
+    if (!mesh) return;
+    const mat = mesh.material as THREE.MeshBasicMaterial;
+    if (on) {
+      if (!mat.map) {
+        mat.map = makeHaloTexture(this.theme);
+        mat.needsUpdate = true;
+      }
+      mat.color.set("#ffffff");
+      mat.opacity = 0.72 + pulse * 0.28;
+      mesh.visible = true;
+    } else {
+      mat.opacity = 0;
+      mesh.visible = false;
+    }
+  }
+
+  private arrangeEmptyKingDemo(): void {
+    if (!this.state) return;
+    const king = this.allCards(this.state).find((card) => card.value === this.state!.highest);
+    if (!king) return;
+    const loc = findCard(this.state, king.id);
+    if (!loc) return;
+    if (loc.pile === "stock") this.state.stock.splice(loc.index, 1);
+    else if (loc.pile === "waste") this.state.waste.splice(loc.index, 1);
+    else if (loc.pile === "foundation" && loc.column !== undefined) {
+      this.state.foundations[loc.column]?.splice(loc.index, 1);
+    } else if (loc.pile === "tableau" && loc.column !== undefined) {
+      this.state.tableau[loc.column]?.splice(loc.index, 1);
+    }
+    king.faceUp = true;
+    this.state.waste.push(king);
+    const first = this.state.tableau[0];
+    if (!first) return;
+    while (first.length > 0) {
+      const card = first.pop();
+      if (!card) break;
+      card.faceUp = false;
+      this.state.stock.unshift(card);
+    }
+  }
+
+  private pullCard(match: (card: CardModel) => boolean): CardModel | undefined {
+    if (!this.state) return undefined;
+    const piles = [this.state.stock, this.state.waste, ...this.state.foundations, ...this.state.tableau];
+    for (const pile of piles) {
+      const index = pile.findIndex(match);
+      if (index < 0) continue;
+      const [card] = pile.splice(index, 1);
+      return card;
+    }
+    return undefined;
+  }
+
+  private arrangeHomeableDemo(): void {
+    if (!this.state) return;
+    const lowest = this.state.lowest;
+    const first = this.pullCard((card) => card.value === lowest);
+    const second = this.pullCard((card) => card.value === lowest);
+    if (first) {
+      first.faceUp = true;
+      this.state.waste.push(first);
+    }
+    if (second) {
+      second.faceUp = true;
+      this.state.tableau[1]?.push(second);
+    }
+  }
+
+  private pulseEmptyKingHint(): void {
+    if (!this.state) return;
+    const hint = emptyColumnHint(this.state);
+    if (!hint) return;
+    const pulse = 0.5 + Math.sin(performance.now() / 260) * 0.5;
+    const view = this.cards.get(hint.wasteId);
+    const face = view ? (view.mesh.material as THREE.MeshStandardMaterial[])[4] : undefined;
+    if (face && this.selectedId !== hint.wasteId) {
+      face.emissive = new THREE.Color(this.theme.glow);
+      face.emissiveIntensity = 0.55 + pulse * 0.4;
+    }
+    this.glowEmptyPads(hint.columns, pulse);
   }
 
   private resize(): void {
@@ -917,6 +1176,7 @@ export class SkipCountGame {
       this.syncHighlights();
     }
 
+    this.pulseEmptyKingHint();
     this.renderer.render(this.scene, this.camera);
   }
 }

@@ -138,6 +138,43 @@ export function canPlayToFoundation(state: GameState, card: CardModel): boolean 
   return Boolean(top && top.suit === card.suit && card.value - top.value === state.multiplier);
 }
 
+/** Kid-friendly double-tap window (touch + mouse). */
+export const DOUBLE_TAP_MS = 360;
+
+export function isDoubleTap(
+  prev: { id: string; time: number } | null,
+  id: string,
+  now: number,
+  windowMs = DOUBLE_TAP_MS,
+): boolean {
+  return Boolean(prev && prev.id === id && now - prev.time <= windowMs && now >= prev.time);
+}
+
+/** Waste top or face-up tableau top that can legally go to its suit home. */
+export function canAutoHome(state: GameState, id: string): boolean {
+  const loc = findCard(state, id);
+  if (!loc) return false;
+  if (loc.pile === "waste") {
+    const top = state.waste[state.waste.length - 1];
+    return Boolean(top && top.id === id && top.faceUp && canPlayToFoundation(state, top));
+  }
+  if (loc.pile === "tableau" && loc.column !== undefined) {
+    const pile = state.tableau[loc.column];
+    const top = pile?.[pile.length - 1];
+    return Boolean(top && top.id === id && top.faceUp && canPlayToFoundation(state, top));
+  }
+  return false;
+}
+
+export function playToFoundation(state: GameState, id: string): boolean {
+  if (!canAutoHome(state, id)) return false;
+  const moved = removeRun(state, id);
+  const card = moved[0];
+  if (!card || moved.length !== 1) return false;
+  state.foundations[suitIndex(card.suit)]?.push(card);
+  return true;
+}
+
 export function canPlaceOnCard(state: GameState, moving: CardModel, dest: CardModel): boolean {
   return dest.value - moving.value === state.multiplier;
 }
@@ -153,6 +190,22 @@ export function canStackOnTableau(state: GameState, moving: CardModel, column: n
 export function playableWasteId(state: GameState): string | undefined {
   const top = state.waste[state.waste.length - 1];
   return top?.faceUp ? top.id : undefined;
+}
+
+export function emptyTableauColumns(state: GameState): number[] {
+  return state.tableau.flatMap((pile, index) => (pile.length === 0 ? [index] : []));
+}
+
+/**
+ * Waste-top king that can fill an empty column: face-up N×13 on waste,
+ * plus at least one vacant tableau slot.
+ */
+export function emptyColumnHint(state: GameState): { wasteId: string; columns: number[] } | null {
+  const top = state.waste[state.waste.length - 1];
+  if (!top?.faceUp || top.value !== state.highest) return null;
+  const columns = emptyTableauColumns(state);
+  if (columns.length === 0) return null;
+  return { wasteId: top.id, columns };
 }
 
 /** Move a waste or tableau run onto a column. Returns false if the play is illegal. */
