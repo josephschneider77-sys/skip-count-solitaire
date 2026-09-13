@@ -109,6 +109,13 @@ export class SkipCountGame {
     this.canvas.addEventListener("pointerdown", (event) => this.onPointer(event));
     this.resize();
     this.renderer.setAnimationLoop(() => this.tick());
+    if (import.meta.env.DEV) {
+      Object.assign(window, {
+        __scsTap: (id: string) => this.onCardTapped(id),
+        __scsWaste: () => (this.state ? playableWasteId(this.state) : undefined),
+        __scsHomeable: () => (this.state ? playableFoundationIds(this.state) : []),
+      });
+    }
   }
 
   private setupRenderer(): void {
