@@ -20,7 +20,17 @@ import {
 } from "./rules";
 import { themeFor, type DeckTheme } from "./themes";
 import { edgeMaterial, makeBackTexture, makeFaceTexture, makePadTexture, makeTableTexture } from "./textures";
-import { CARD_D, CARD_H, CARD_LEAN, CARD_W, columnX, layoutForAspect, ndcSideMargin, type LayoutMetrics } from "./layout";
+import {
+  CARD_D,
+  CARD_H,
+  CARD_LEAN,
+  CARD_W,
+  cameraDirection,
+  columnX,
+  layoutForAspect,
+  ndcSideMargin,
+  type LayoutMetrics,
+} from "./layout";
 
 type CardView = {
   model: CardModel;
@@ -520,13 +530,9 @@ export class SkipCountGame {
     const box = this.boardBounds();
     const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
-    const look = new THREE.Vector3(center.x, 0.2, center.z);
-    const direction =
-      aspect < 0.75
-        ? new THREE.Vector3(0, 1.08, 0.62).normalize()
-        : aspect < 1
-          ? new THREE.Vector3(0, 0.82, 0.88).normalize()
-          : new THREE.Vector3(0, 0.58, 1).normalize();
+    const look = new THREE.Vector3(center.x, 0.55, center.z);
+    const aim = cameraDirection(aspect);
+    const direction = new THREE.Vector3(aim.x, aim.y, aim.z);
     const { side, top, bottom } = this.ndcMargins();
     const vFov = THREE.MathUtils.degToRad(this.camera.fov);
     const hFov = 2 * Math.atan(Math.tan(vFov / 2) * Math.max(aspect, 0.01));
