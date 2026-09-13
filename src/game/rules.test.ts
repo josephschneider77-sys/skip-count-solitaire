@@ -23,16 +23,22 @@ function rngFrom(seed: number): () => number {
 }
 
 assert.deepEqual(multiplesUpTo(2).slice(0, 5), [2, 4, 6, 8, 10]);
-assert.equal(multiplesUpTo(2).at(-1), 100);
-assert.equal(multiplesUpTo(2).length, 50);
-assert.equal(multiplesUpTo(3).at(-1), 99);
-assert.equal(multiplesUpTo(7).at(-1), 98);
-assert.equal(multiplesUpTo(10).at(-1), 100);
+assert.equal(multiplesUpTo(2).at(-1), 26);
+assert.equal(multiplesUpTo(2).length, 13);
+assert.equal(multiplesUpTo(3).at(-1), 39);
+assert.equal(multiplesUpTo(4).at(-1), 52);
+assert.equal(multiplesUpTo(5).at(-1), 65);
+assert.equal(multiplesUpTo(6).at(-1), 78);
+assert.equal(multiplesUpTo(7).at(-1), 91);
+assert.equal(multiplesUpTo(8).at(-1), 104);
+assert.equal(multiplesUpTo(9).at(-1), 117);
+assert.equal(multiplesUpTo(10).at(-1), 130);
 
-assert.equal(deckSize(2), 200);
-assert.equal(deckSize(7), 56);
-assert.equal(deckSize(10), 40);
-assert.equal(buildDeck(5).length, 80);
+for (let level = 2; level <= 10; level += 1) {
+  assert.equal(multiplesUpTo(level).length, 13);
+  assert.equal(deckSize(level), 52);
+  assert.equal(buildDeck(level).length, 52);
+}
 assert.equal(new Set(buildDeck(4).map((card) => card.suit)).size, 4);
 
 const dealt = dealKlondike(7, rngFrom(7));
@@ -43,15 +49,16 @@ assert.deepEqual(
 );
 assert.equal(
   dealt.tableau.reduce((sum, col) => sum + col.length, 0) + dealt.stock.length,
-  56,
+  52,
 );
+assert.equal(dealt.stock.length, 24);
 dealt.tableau.forEach((col) => {
   col.forEach((card, index) => {
     assert.equal(card.faceUp, index === col.length - 1);
   });
 });
 assert.equal(dealt.lowest, 7);
-assert.equal(dealt.highest, 98);
+assert.equal(dealt.highest, 91);
 
 const ace = { id: "a", value: 7, multiplier: 7, suit: SUITS[0], faceUp: true } as const;
 assert.equal(canPlayToFoundation(dealt, { ...ace }), true);
@@ -65,7 +72,7 @@ assert.equal(canPlaceOnCard(state2, blackEight, redTen), true);
 assert.equal(canPlaceOnCard(state2, redEight, redTen), false);
 
 state2.tableau[0] = [];
-assert.equal(canStackOnTableau(state2, { ...redTen, value: 100 }, 0), true);
+assert.equal(canStackOnTableau(state2, { ...redTen, value: 26 }, 0), true);
 assert.equal(canStackOnTableau(state2, { ...redTen, value: 98 }, 0), false);
 
 const wasteCard = { id: "w", value: 7, multiplier: 7, suit: SUITS[1], faceUp: true } as const;

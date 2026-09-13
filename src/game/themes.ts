@@ -1,3 +1,5 @@
+import { multiplesUpTo } from "./rules";
+
 export type IconKind =
   | "heart"
   | "star"
@@ -157,11 +159,7 @@ export function themeFor(multiplier: number): DeckTheme {
   return DECK_THEMES[multiplier] ?? DECK_THEMES[2];
 }
 
-/** Every level uses that multiplier’s skip-count through about 100. */
+/** Every level is 13 skip-count ranks × 4 suits (52 cards). */
 export function deckValues(multiplier: number): number[] {
-  const values: number[] = [];
-  for (let value = multiplier; value <= 100; value += multiplier) {
-    values.push(value);
-  }
-  return values;
+  return multiplesUpTo(multiplier);
 }
