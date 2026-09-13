@@ -22,7 +22,7 @@ import {
 } from "./rules";
 import { restoreState, snapshotState, type GameSnap } from "./history";
 import { themeFor, type DeckTheme } from "./themes";
-import { edgeMaterial, makeBackTexture, makeFaceTexture, makePadTexture, makeTableTexture } from "./textures";
+import { edgeMaterial, makeBackTexture, makeFaceTexture, makeHaloTexture, makePadTexture, makeTableTexture } from "./textures";
 import {
   CARD_D,
   CARD_H,
@@ -198,12 +198,13 @@ export class SkipCountGame {
 
   private makeHalo(): THREE.Mesh {
     const mesh = new THREE.Mesh(
-      new THREE.PlaneGeometry(CARD_W * 1.24, CARD_H * 1.24),
+      new THREE.PlaneGeometry(CARD_W * 1.55, CARD_H * 1.55),
       new THREE.MeshBasicMaterial({
-        color: 0xffe36a,
+        map: makeHaloTexture(this.theme),
         transparent: true,
         opacity: 0,
         depthWrite: false,
+        toneMapped: false,
       }),
     );
     mesh.rotation.x = CARD_LEAN;
@@ -427,10 +428,10 @@ export class SkipCountGame {
     this.foundationPads.forEach((pad, i) => pad.position.copy(this.foundationOrigin(i)));
     this.tableauPads.forEach((pad, i) => pad.position.copy(this.tableauOrigin(i, 0)));
     if (this.wasteHalo) {
-      this.wasteHalo.position.copy(this.wasteOrigin()).setY(CARD_Y - 0.02);
+      this.wasteHalo.position.copy(this.wasteOrigin()).setY(CARD_Y + 0.02);
     }
     this.emptyHalos.forEach((halo, i) => {
-      halo.position.copy(this.tableauOrigin(i, 0)).setY(CARD_Y - 0.02);
+      halo.position.copy(this.tableauOrigin(i, 0)).setY(CARD_Y + 0.02);
     });
   }
 
@@ -455,6 +456,15 @@ export class SkipCountGame {
       mat.map = tex;
       mat.needsUpdate = true;
     });
+    const refreshHalo = (mesh: THREE.Mesh | null): void => {
+      if (!mesh) return;
+      const mat = mesh.material as THREE.MeshBasicMaterial;
+      mat.map?.dispose();
+      mat.map = makeHaloTexture(this.theme);
+      mat.needsUpdate = true;
+    };
+    this.emptyHalos.forEach((halo) => refreshHalo(halo));
+    refreshHalo(this.wasteHalo);
   }
 
   private poseFor(id: string): THREE.Vector3 {
@@ -1003,8 +1013,12 @@ export class SkipCountGame {
     if (!mesh) return;
     const mat = mesh.material as THREE.MeshBasicMaterial;
     if (on) {
-      mat.color.set(this.theme.accent2);
-      mat.opacity = 0.4 + pulse * 0.35;
+      if (!mat.map) {
+        mat.map = makeHaloTexture(this.theme);
+        mat.needsUpdate = true;
+      }
+      mat.color.set("#ffffff");
+      mat.opacity = 0.72 + pulse * 0.28;
       mesh.visible = true;
     } else {
       mat.opacity = 0;
