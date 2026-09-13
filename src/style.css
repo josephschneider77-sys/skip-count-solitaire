@@ -98,6 +98,15 @@ body,
   color: #c2186a;
 }
 
+.empty-chip {
+  background: linear-gradient(180deg, #fff7c8 0%, #ffe36a 100%);
+  border-color: #fff;
+}
+
+.empty-chip strong {
+  color: #8a1490;
+}
+
 .hud-actions {
   margin-left: auto;
   display: flex;
@@ -125,6 +134,12 @@ body,
 .mini-btn:active {
   transform: translateY(2px);
   box-shadow: 0 3px 0 #d39a1a;
+}
+
+.mini-btn:disabled {
+  opacity: 0.42;
+  cursor: default;
+  transform: none;
 }
 
 .mini-btn.ghost {
@@ -331,6 +346,10 @@ h2 {
 
   .hud-chip strong {
     font-size: 15px;
+  }
+
+  .empty-chip strong {
+    font-size: 18px;
   }
 
   .mini-btn {

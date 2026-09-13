@@ -19,6 +19,7 @@ import {
   type CardModel,
   type GameState,
 } from "./rules";
+import { restoreState, snapshotState, type GameSnap } from "./history";
 import { themeFor, type DeckTheme } from "./themes";
 import { edgeMaterial, makeBackTexture, makeFaceTexture, makePadTexture, makeTableTexture } from "./textures";
 import {
@@ -89,6 +90,7 @@ export class SkipCountGame {
   private busy = false;
   private particles: THREE.Points | null = null;
   private hintUntil = 0;
+  private undos: GameSnap[] = [];
 
   mount(): void {
     this.setupRenderer();
@@ -219,6 +221,7 @@ export class SkipCountGame {
       }
     }
     document.querySelector("#btn-play")?.addEventListener("click", () => this.startLevel(2));
+    document.querySelector("#btn-undo")?.addEventListener("click", () => this.undoLast());
     document.querySelector("#btn-hint")?.addEventListener("click", () => this.showHint());
     document.querySelector("#btn-restart")?.addEventListener("click", () => {
       if (this.state) this.startLevel(this.state.multiplier);
@@ -238,6 +241,8 @@ export class SkipCountGame {
   private showTitle(): void {
     this.clearCards();
     this.state = null;
+    this.undos = [];
+    this.syncUndoButton();
     setHidden("#title-screen", false);
     setHidden("#win-screen", true);
     setHidden("#hud", true);
@@ -252,6 +257,7 @@ export class SkipCountGame {
     setHidden("#hint-line", false);
     this.theme = themeFor(multiplier);
     this.selectedId = null;
+    this.undos = [];
     this.clearCards();
     this.state = dealKlondike(multiplier);
     this.refreshPads();
@@ -261,6 +267,7 @@ export class SkipCountGame {
       this.fitCamera();
     });
     this.syncHud();
+    this.syncUndoButton();
     this.buildCards();
     this.dealIntro();
   }
@@ -727,8 +734,14 @@ export class SkipCountGame {
 
   private drawCard(): void {
     if (!this.state || this.busy) return;
+    if (this.state.stock.length === 0 && this.state.waste.length === 0) return;
+    this.pushUndo();
     const result = drawFromStock(this.state);
-    if (result === "empty") return;
+    if (result === "empty") {
+      this.undos.pop();
+      this.syncUndoButton();
+      return;
+    }
     this.sfx.draw();
     this.selectedId = null;
     if (result === "recycle") {
@@ -756,9 +769,14 @@ export class SkipCountGame {
 
   private moveToFoundation(id: string): void {
     if (!this.state) return;
+    this.pushUndo();
     const run = removeRun(this.state, id);
     const card = run[0];
-    if (!card || run.length !== 1) return;
+    if (!card || run.length !== 1) {
+      this.undos.pop();
+      this.syncUndoButton();
+      return;
+    }
     this.state.foundations[suitIndex(card.suit)]?.push(card);
     const view = this.cards.get(card.id);
     if (!view) return;
@@ -780,8 +798,13 @@ export class SkipCountGame {
 
   private moveRunToTableau(id: string, column: number): void {
     if (!this.state) return;
+    this.pushUndo();
     const run = removeRun(this.state, id);
-    if (run.length === 0) return;
+    if (run.length === 0) {
+      this.undos.pop();
+      this.syncUndoButton();
+      return;
+    }
     this.state.tableau[column]?.push(...run);
     this.busy = true;
     this.selectedId = null;
@@ -840,12 +863,49 @@ export class SkipCountGame {
     setHidden("#win-screen", false);
   }
 
+  private pushUndo(): void {
+    if (!this.state) return;
+    this.undos.push(snapshotState(this.state));
+    this.syncUndoButton();
+  }
+
+  private undoLast(): void {
+    if (!this.state || this.undos.length === 0) return;
+    const snap = this.undos.pop();
+    if (!snap) return;
+    this.tweens.length = 0;
+    this.busy = false;
+    this.selectedId = null;
+    restoreState(this.state, snap);
+    this.snapAllCards();
+    this.refreshPads();
+    this.fitCamera();
+    this.syncHud();
+    this.syncHighlights();
+    this.syncUndoButton();
+    setHidden("#win-screen", true);
+    this.sfx.select();
+  }
+
+  private snapAllCards(): void {
+    this.placePads();
+    this.cards.forEach((view, id) => {
+      view.group.position.copy(this.poseFor(id));
+      view.flipper.rotation.x = view.model.faceUp ? 0 : Math.PI;
+    });
+  }
+
+  private syncUndoButton(): void {
+    const btn = document.querySelector<HTMLButtonElement>("#btn-undo");
+    if (btn) btn.disabled = this.undos.length === 0;
+  }
+
   private syncHud(): void {
     if (!this.state) return;
     const home = foundationCount(this.state);
     setText("#hud-level", String(this.state.multiplier));
     setText("#hud-next", String(home));
-    setText("#hud-theme", this.theme.label);
+    setText("#hud-empty", String(this.state.highest));
     const hint = document.querySelector("#hint-line");
     if (hint) {
       hint.textContent = `Draw. Homes ${this.state.lowest}→${this.state.highest} by ${this.state.multiplier}s. Stack down by ${this.state.multiplier}s. Empty wants ${this.state.highest}.`;

@@ -11,6 +11,7 @@ import {
   isWon,
   multiplesUpTo,
   playToTableau,
+  highestMultiple,
   playableWasteId,
   removeRun,
   runFrom,
@@ -37,6 +38,8 @@ assert.equal(multiplesUpTo(9).at(-1), 117);
 assert.equal(multiplesUpTo(10).at(-1), 130);
 
 for (let level = 2; level <= 10; level += 1) {
+  assert.equal(highestMultiple(level), level * 13);
+  assert.equal(multiplesUpTo(level).at(-1), level * 13);
   assert.equal(multiplesUpTo(level).length, 13);
   assert.equal(deckSize(level), 52);
   assert.equal(buildDeck(level).length, 52);
@@ -118,8 +121,53 @@ assert.equal(playToTableau(wastePlay, "waste-old", 2), false);
 const emptyKing = dealKlondike(2, rngFrom(5));
 emptyKing.tableau[3] = [];
 emptyKing.waste = [{ id: "king-26", value: 26, multiplier: 2, suit: "diamonds", faceUp: true }];
+assert.equal(canStackOnTableau(emptyKing, emptyKing.waste[0]!, 3), true);
 assert.equal(playToTableau(emptyKing, "king-26", 3), true);
 assert.equal(emptyKing.tableau[3]?.[0]?.value, 26);
+
+const wasteNotKing = dealKlondike(2, rngFrom(15));
+wasteNotKing.tableau[0] = [];
+wasteNotKing.waste = [{ id: "waste-24", value: 24, multiplier: 2, suit: "clubs", faceUp: true }];
+assert.equal(canStackOnTableau(wasteNotKing, wasteNotKing.waste[0]!, 0), false);
+assert.equal(playToTableau(wasteNotKing, "waste-24", 0), false);
+assert.equal(wasteNotKing.waste.at(-1)?.id, "waste-24");
+assert.equal(wasteNotKing.tableau[0]?.length, 0);
+
+const tableauNotKing = dealKlondike(2, rngFrom(16));
+tableauNotKing.tableau[0] = [];
+tableauNotKing.tableau[1] = [
+  { id: "tab-24", value: 24, multiplier: 2, suit: "spades", faceUp: true },
+  { id: "tab-22", value: 22, multiplier: 2, suit: "hearts", faceUp: true },
+];
+assert.equal(canStackOnTableau(tableauNotKing, tableauNotKing.tableau[1]![0]!, 0), false);
+assert.equal(playToTableau(tableauNotKing, "tab-24", 0), false);
+assert.equal(tableauNotKing.tableau[0]?.length, 0);
+assert.equal(tableauNotKing.tableau[1]?.length, 2);
+
+const kingRun = dealKlondike(2, rngFrom(17));
+kingRun.tableau[0] = [];
+kingRun.tableau[1] = [
+  { id: "run-26", value: 26, multiplier: 2, suit: "spades", faceUp: true },
+  { id: "run-24", value: 24, multiplier: 2, suit: "hearts", faceUp: true },
+];
+assert.equal(canStackOnTableau(kingRun, kingRun.tableau[1]![0]!, 0), true);
+assert.equal(playToTableau(kingRun, "run-26", 0), true);
+assert.deepEqual(
+  kingRun.tableau[0]?.map((card) => card.value),
+  [26, 24],
+);
+
+const emptyLevel3 = dealKlondike(3, rngFrom(18));
+emptyLevel3.tableau[2] = [];
+assert.equal(emptyLevel3.highest, 39);
+assert.equal(
+  canStackOnTableau(emptyLevel3, { id: "k39", value: 39, multiplier: 3, suit: "hearts", faceUp: true }, 2),
+  true,
+);
+assert.equal(
+  canStackOnTableau(emptyLevel3, { id: "k36", value: 36, multiplier: 3, suit: "hearts", faceUp: true }, 2),
+  false,
+);
 
 const heartsPlay = dealKlondike(2, rngFrom(6));
 heartsPlay.waste = [{ id: "waste-2h", value: 2, multiplier: 2, suit: "hearts", faceUp: true }];
