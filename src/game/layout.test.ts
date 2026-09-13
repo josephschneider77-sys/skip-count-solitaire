@@ -18,14 +18,16 @@ assert.ok(phone.colGap < 1.42, "portrait columns should overlap slightly");
 assert.equal(columnX(3, phone.colGap), 0);
 assert.ok(ndcSideMargin(390 / 844) < ndcSideMargin(1280 / 800));
 
-assert.ok(Math.abs(CARD_LEAN + Math.PI / 2) < 0.25, "cards should lie almost flat");
+assert.ok(Math.abs(CARD_LEAN + Math.PI / 2) < 0.2, "cards should lie almost flat");
 
 const phoneCam = cameraDirection(390 / 844);
 const desktopCam = cameraDirection(1280 / 800);
-assert.ok(phoneCam.y > 0.95, "phone camera should be nearly straight down");
-assert.ok(desktopCam.y > 0.95, "desktop camera should be nearly straight down");
-assert.ok(phoneCam.y > phoneCam.z * 8);
-assert.ok(desktopCam.y > desktopCam.z * 8);
+assert.ok(phoneCam.y > 0.9, "phone camera should stay mostly top-down");
+assert.ok(desktopCam.y > 0.9, "desktop camera should stay mostly top-down");
+assert.ok(Math.abs(phoneCam.x) > 0.05 && phoneCam.z > 0.1, "light iso offset on phone");
+assert.ok(Math.abs(desktopCam.x) > 0.05 && desktopCam.z > 0.1, "light iso offset on desktop");
+assert.ok(phoneCam.y > phoneCam.z * 3);
+assert.ok(desktopCam.y > desktopCam.z * 3);
 
 const phoneView = orthoHalfExtents(10, 8, 390 / 844, 0.04, 0.2, 0.15);
 assert.ok(phoneView.halfW / phoneView.halfH - 390 / 844 < 0.01);
