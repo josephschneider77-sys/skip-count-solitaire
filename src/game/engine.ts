@@ -860,7 +860,7 @@ export class SkipCountGame {
     setText("#hud-theme", this.theme.label);
     const hint = document.querySelector("#hint-line");
     if (hint) {
-      hint.textContent = `Draw. Homes ${this.state.lowest}→${this.state.highest} by ${this.state.multiplier}s. Stack down, switch colors. Empty wants ${this.state.highest}.`;
+      hint.textContent = `Draw. Homes ${this.state.lowest}→${this.state.highest} by ${this.state.multiplier}s. Stack down by ${this.state.multiplier}s. Empty wants ${this.state.highest}.`;
     }
   }
 

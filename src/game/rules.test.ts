@@ -69,9 +69,15 @@ assert.equal(canPlayToFoundation(dealt, { ...ace, value: 14 }), false);
 const redTen = { id: "r10", value: 10, multiplier: 2, suit: "hearts" as const, faceUp: true };
 const blackEight = { id: "b8", value: 8, multiplier: 2, suit: "spades" as const, faceUp: true };
 const redEight = { id: "r8", value: 8, multiplier: 2, suit: "diamonds" as const, faceUp: true };
+const redTwo = { id: "r2", value: 2, multiplier: 2, suit: "hearts" as const, faceUp: true };
+const redFour = { id: "r4", value: 4, multiplier: 2, suit: "hearts" as const, faceUp: true };
+const redSix = { id: "r6", value: 6, multiplier: 2, suit: "hearts" as const, faceUp: true };
 const state2 = dealKlondike(2, rngFrom(2));
 assert.equal(canPlaceOnCard(state2, blackEight, redTen), true);
-assert.equal(canPlaceOnCard(state2, redEight, redTen), false);
+assert.equal(canPlaceOnCard(state2, redEight, redTen), true);
+assert.equal(canPlaceOnCard(state2, redTwo, redFour), true);
+assert.equal(canPlaceOnCard(state2, redTwo, redSix), false);
+assert.equal(canPlaceOnCard(state2, redFour, redTwo), false);
 
 state2.tableau[0] = [];
 assert.equal(canStackOnTableau(state2, { ...redTen, value: 26 }, 0), true);
@@ -114,5 +120,28 @@ emptyKing.tableau[3] = [];
 emptyKing.waste = [{ id: "king-26", value: 26, multiplier: 2, suit: "diamonds", faceUp: true }];
 assert.equal(playToTableau(emptyKing, "king-26", 3), true);
 assert.equal(emptyKing.tableau[3]?.[0]?.value, 26);
+
+const heartsPlay = dealKlondike(2, rngFrom(6));
+heartsPlay.waste = [{ id: "waste-2h", value: 2, multiplier: 2, suit: "hearts", faceUp: true }];
+heartsPlay.tableau[4] = [{ id: "tab-4h", value: 4, multiplier: 2, suit: "hearts", faceUp: true }];
+assert.equal(canStackOnTableau(heartsPlay, heartsPlay.waste[0]!, 4), true);
+assert.equal(playToTableau(heartsPlay, "waste-2h", 4), true);
+assert.equal(heartsPlay.waste.length, 0);
+assert.equal(heartsPlay.tableau[4]?.at(-1)?.id, "waste-2h");
+assert.equal(playToTableau(heartsPlay, "waste-2h", 4), false);
+
+const sameSuitRun = dealKlondike(2, rngFrom(8));
+sameSuitRun.tableau[5] = [
+  { id: "run-4h", value: 4, multiplier: 2, suit: "hearts", faceUp: true },
+  { id: "run-2h", value: 2, multiplier: 2, suit: "hearts", faceUp: true },
+];
+assert.ok(runFrom(sameSuitRun, "run-4h")?.length === 2);
+assert.equal(playToTableau(sameSuitRun, "run-4h", 4), false);
+sameSuitRun.tableau[6] = [{ id: "run-6h", value: 6, multiplier: 2, suit: "hearts", faceUp: true }];
+assert.equal(playToTableau(sameSuitRun, "run-4h", 6), true);
+assert.deepEqual(
+  sameSuitRun.tableau[6]?.map((card) => card.id),
+  ["run-6h", "run-4h", "run-2h"],
+);
 
 console.log("rules tests passed");
