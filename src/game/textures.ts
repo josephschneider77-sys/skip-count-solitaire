@@ -307,12 +307,19 @@ function drawRankBadge(
   ctx.restore();
 }
 
+function fillSheet(ctx: CanvasRenderingContext2D, style: string | CanvasGradient): void {
+  ctx.fillStyle = style;
+  ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+}
+
 function makeTexture(draw: (ctx: CanvasRenderingContext2D) => void): THREE.CanvasTexture {
   const canvas = document.createElement("canvas");
   canvas.width = FACE_W;
   canvas.height = FACE_H;
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Could not make card art");
+  // BoxGeometry UVs include the four corners; leave no transparent/black pixels there.
+  fillSheet(ctx, "#fffdf8");
   draw(ctx);
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
@@ -328,6 +335,7 @@ export function makeFaceTexture(theme: DeckTheme, value: number, suit: Suit): TH
     cream.addColorStop(0, "#fffdf8");
     cream.addColorStop(0.5, theme.face);
     cream.addColorStop(1, "#f6e9ff");
+    fillSheet(ctx, cream);
     ctx.fillStyle = cream;
     roundRect(ctx, 0, 0, FACE_W, FACE_H, 56);
     ctx.fill();
@@ -392,6 +400,7 @@ export function makeBackTexture(theme: DeckTheme): THREE.CanvasTexture {
     bg.addColorStop(0.35, theme.back);
     bg.addColorStop(0.7, theme.accent);
     bg.addColorStop(1, theme.accent2);
+    fillSheet(ctx, bg);
     ctx.fillStyle = bg;
     roundRect(ctx, 0, 0, FACE_W, FACE_H, 56);
     ctx.fill();
@@ -477,6 +486,7 @@ export function makePadTexture(title: string, subtitle: string, theme: DeckTheme
   bg.addColorStop(0, "#7a5cff");
   bg.addColorStop(0.45, theme.accent);
   bg.addColorStop(1, theme.accent2);
+  fillSheet(ctx, bg);
   ctx.fillStyle = bg;
   ctx.beginPath();
   ctx.roundRect(0, 0, 512, 768, 48);
