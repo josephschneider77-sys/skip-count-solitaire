@@ -114,6 +114,24 @@ export class SkipCountGame {
         __scsTap: (id: string) => this.onCardTapped(id),
         __scsWaste: () => (this.state ? playableWasteId(this.state) : undefined),
         __scsHomeable: () => (this.state ? playableFoundationIds(this.state) : []),
+        __scsDebugDouble: (id: string) => {
+          if (!this.state) return { error: "no state" };
+          const before = {
+            last: this.lastTap,
+            canHome: canAutoHome(this.state, id),
+            busy: this.busy,
+            waste: this.state.waste.map((card) => card.id),
+          };
+          this.onCardTapped(id);
+          const mid = { last: this.lastTap, selected: this.selectedId, busy: this.busy };
+          this.onCardTapped(id);
+          return {
+            before,
+            mid,
+            homes: foundationCount(this.state),
+            waste: this.state.waste.map((card) => card.id),
+          };
+        },
       });
     }
   }
