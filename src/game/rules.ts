@@ -150,6 +150,21 @@ export function canStackOnTableau(state: GameState, moving: CardModel, column: n
   return Boolean(top && top.faceUp && canPlaceOnCard(state, moving, top));
 }
 
+export function playableWasteId(state: GameState): string | undefined {
+  const top = state.waste[state.waste.length - 1];
+  return top?.faceUp ? top.id : undefined;
+}
+
+/** Move a waste or tableau run onto a column. Returns false if the play is illegal. */
+export function playToTableau(state: GameState, id: string, column: number): boolean {
+  const run = runFrom(state, id);
+  if (!run?.[0] || !canStackOnTableau(state, run[0], column)) return false;
+  const moved = removeRun(state, id);
+  if (moved.length === 0) return false;
+  state.tableau[column]?.push(...moved);
+  return true;
+}
+
 export function runFrom(state: GameState, id: string): CardModel[] | null {
   const loc = findCard(state, id);
   if (!loc) return null;
