@@ -23,6 +23,8 @@ function roundRect(
   ctx.closePath();
 }
 
+const RAINBOW = ["#ff2d6a", "#ff7a1a", "#ffe14a", "#3dff8a", "#3ad4ff", "#7a5cff", "#ff4ad8"];
+
 function drawHeart(ctx: CanvasRenderingContext2D, x: number, y: number, size: number, color: string): void {
   ctx.save();
   ctx.translate(x, y);
@@ -112,31 +114,88 @@ function drawDolphin(ctx: CanvasRenderingContext2D, x: number, y: number, size: 
 }
 
 function drawKitty(ctx: CanvasRenderingContext2D, x: number, y: number, size: number, color: string): void {
+  drawRainbowKitty(ctx, x, y, size, color, false);
+}
+
+function drawRainbowKitty(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+  color: string,
+  withRainbow = true,
+): void {
   ctx.save();
   ctx.translate(x, y);
+  if (withRainbow) {
+    ctx.save();
+    ctx.translate(0, -size * 0.08);
+    RAINBOW.forEach((stripe, i) => {
+      ctx.strokeStyle = stripe;
+      ctx.lineWidth = size * 0.055;
+      ctx.beginPath();
+      ctx.arc(0, size * 0.02, size * 0.42 - i * size * 0.055, Math.PI, 0);
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
   ctx.fillStyle = color;
   ctx.beginPath();
-  ctx.arc(0, size * 0.04, size * 0.32, 0, Math.PI * 2);
+  ctx.ellipse(0, size * 0.2, size * 0.3, size * 0.2, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.beginPath();
-  ctx.moveTo(-size * 0.22, -size * 0.12);
-  ctx.lineTo(-size * 0.34, -size * 0.38);
-  ctx.lineTo(-size * 0.04, -size * 0.22);
+  ctx.arc(0, -size * 0.06, size * 0.24, 0, Math.PI * 2);
   ctx.fill();
   ctx.beginPath();
-  ctx.moveTo(size * 0.22, -size * 0.12);
-  ctx.lineTo(size * 0.34, -size * 0.38);
-  ctx.lineTo(size * 0.04, -size * 0.22);
+  ctx.moveTo(-size * 0.18, -size * 0.18);
+  ctx.lineTo(-size * 0.3, -size * 0.46);
+  ctx.lineTo(-size * 0.02, -size * 0.26);
   ctx.fill();
-  ctx.fillStyle = "#3a2030";
   ctx.beginPath();
-  ctx.arc(-size * 0.1, 0, size * 0.045, 0, Math.PI * 2);
-  ctx.arc(size * 0.1, 0, size * 0.045, 0, Math.PI * 2);
+  ctx.moveTo(size * 0.18, -size * 0.18);
+  ctx.lineTo(size * 0.3, -size * 0.46);
+  ctx.lineTo(size * 0.02, -size * 0.26);
+  ctx.fill();
+  ctx.fillStyle = "#ffb3ec";
+  ctx.beginPath();
+  ctx.moveTo(-size * 0.16, -size * 0.2);
+  ctx.lineTo(-size * 0.24, -size * 0.36);
+  ctx.lineTo(-size * 0.08, -size * 0.24);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(size * 0.16, -size * 0.2);
+  ctx.lineTo(size * 0.24, -size * 0.36);
+  ctx.lineTo(size * 0.08, -size * 0.24);
+  ctx.fill();
+  ctx.fillStyle = "#fffdf8";
+  ctx.beginPath();
+  ctx.arc(-size * 0.08, -size * 0.08, size * 0.055, 0, Math.PI * 2);
+  ctx.arc(size * 0.08, -size * 0.08, size * 0.055, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#2a1040";
+  ctx.beginPath();
+  ctx.arc(-size * 0.08, -size * 0.08, size * 0.028, 0, Math.PI * 2);
+  ctx.arc(size * 0.08, -size * 0.08, size * 0.028, 0, Math.PI * 2);
   ctx.fill();
   ctx.fillStyle = "#ff4ad8";
   ctx.beginPath();
-  ctx.arc(0, size * 0.08, size * 0.04, 0, Math.PI * 2);
+  ctx.moveTo(0, size * 0.01);
+  ctx.lineTo(-size * 0.04, size * 0.07);
+  ctx.lineTo(size * 0.04, size * 0.07);
+  ctx.closePath();
   ctx.fill();
+  ctx.strokeStyle = "#2a1040";
+  ctx.lineWidth = Math.max(1.2, size * 0.018);
+  ctx.beginPath();
+  ctx.moveTo(-size * 0.06, size * 0.05);
+  ctx.lineTo(-size * 0.28, size * 0.02);
+  ctx.moveTo(-size * 0.06, size * 0.07);
+  ctx.lineTo(-size * 0.26, size * 0.1);
+  ctx.moveTo(size * 0.06, size * 0.05);
+  ctx.lineTo(size * 0.28, size * 0.02);
+  ctx.moveTo(size * 0.06, size * 0.07);
+  ctx.lineTo(size * 0.26, size * 0.1);
+  ctx.stroke();
   ctx.restore();
 }
 
@@ -153,8 +212,6 @@ function drawUnicorn(ctx: CanvasRenderingContext2D, x: number, y: number, size: 
   ctx.fill();
   ctx.restore();
 }
-
-const RAINBOW = ["#ff2d6a", "#ff7a1a", "#ffe14a", "#3dff8a", "#3ad4ff", "#7a5cff", "#ff4ad8"];
 
 function drawRainbow(ctx: CanvasRenderingContext2D, x: number, y: number, size: number): void {
   ctx.save();
@@ -398,40 +455,44 @@ export function makeBackTexture(theme: DeckTheme): THREE.CanvasTexture {
     const bg = ctx.createLinearGradient(0, 0, FACE_W, FACE_H);
     bg.addColorStop(0, "#5b12b8");
     bg.addColorStop(0.35, theme.back);
-    bg.addColorStop(0.7, theme.accent);
+    bg.addColorStop(0.7, "#7a5cff");
     bg.addColorStop(1, theme.accent2);
     fillSheet(ctx, bg);
     ctx.fillStyle = bg;
     roundRect(ctx, 0, 0, FACE_W, FACE_H, 56);
     ctx.fill();
 
-    rainbowRibbon(ctx, 36, 32, FACE_W - 72, 22);
-    rainbowRibbon(ctx, 36, FACE_H - 54, FACE_W - 72, 22);
-    glitter(ctx, FACE_W, FACE_H, 160);
+    rainbowRibbon(ctx, 28, 24, FACE_W - 56, 18);
+    rainbowRibbon(ctx, 28, FACE_H - 42, FACE_W - 56, 18);
+    glitter(ctx, FACE_W, FACE_H, 120);
+    drawRainbow(ctx, FACE_W * 0.5, FACE_H * 0.3, 220);
+    drawRainbow(ctx, FACE_W * 0.5, FACE_H * 0.78, 200);
 
-    ctx.save();
-    ctx.globalAlpha = 0.88;
-    drawRainbow(ctx, FACE_W / 2, FACE_H * 0.62, 260);
-    ctx.restore();
+    const kittens: Array<[number, number, number, boolean]> = [
+      [118, 168, 78, true],
+      [392, 176, 72, true],
+      [256, 210, 92, true],
+      [96, 340, 70, true],
+      [416, 348, 74, true],
+      [190, 400, 64, false],
+      [330, 408, 64, false],
+      [128, 560, 76, true],
+      [384, 552, 80, true],
+      [256, 600, 70, true],
+    ];
+    kittens.forEach(([x, y, size, bowed], i) => {
+      drawRainbowKitty(ctx, x, y, size, RAINBOW[i % RAINBOW.length], bowed);
+    });
 
-    for (let i = 0; i < 16; i += 1) {
-      const x = 56 + (i % 4) * 110;
-      const y = 80 + Math.floor(i / 4) * 70;
-      drawSparkle(ctx, x, y + (i % 2) * 10, 16, "rgba(255,255,255,0.62)");
-    }
-
-    ctx.fillStyle = "rgba(255,247,255,0.2)";
-    roundRect(ctx, 72, 250, FACE_W - 144, 230, 28);
+    ctx.fillStyle = "rgba(42, 16, 72, 0.42)";
+    roundRect(ctx, 86, 300, FACE_W - 172, 150, 28);
     ctx.fill();
-    ctx.fillStyle = theme.backInk;
+    ctx.fillStyle = "#fff7ff";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.font = "900 56px 'Baloo 2', 'Trebuchet MS', sans-serif";
-    ctx.fillText(theme.label, FACE_W / 2, FACE_H / 2 - 16);
-    ctx.font = "700 26px 'Baloo 2', 'Trebuchet MS', sans-serif";
-    ctx.fillText(theme.name, FACE_W / 2, FACE_H / 2 + 36);
-    drawIcon(ctx, theme.icon, FACE_W / 2, 150, 72, theme.backInk);
-    drawIcon(ctx, theme.icon, FACE_W / 2, FACE_H - 130, 56, theme.backInk);
+    ctx.font = "900 48px 'Baloo 2', 'Trebuchet MS', sans-serif";
+    ctx.fillText("SKIP", FACE_W / 2, FACE_H / 2 - 18);
+    ctx.fillText("COUNT", FACE_W / 2, FACE_H / 2 + 28);
 
     ctx.strokeStyle = "#ffe14a";
     ctx.lineWidth = 10;

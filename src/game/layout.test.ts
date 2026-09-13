@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  CARD_FACE_SPIN,
   CARD_LEAN,
   cameraDirection,
   columnX,
@@ -19,6 +20,7 @@ assert.equal(columnX(3, phone.colGap), 0);
 assert.ok(ndcSideMargin(390 / 844) < ndcSideMargin(1280 / 800));
 
 assert.ok(Math.abs(CARD_LEAN + Math.PI / 2) < 0.12, "cards should lie almost flat");
+assert.equal(CARD_FACE_SPIN, Math.PI, "card art should be spun so ranks face the player");
 
 const phoneCam = cameraDirection(390 / 844);
 const desktopCam = cameraDirection(1280 / 800);
