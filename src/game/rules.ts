@@ -182,7 +182,7 @@ export function canPlaceOnCard(state: GameState, moving: CardModel, dest: CardMo
 export function canStackOnTableau(state: GameState, moving: CardModel, column: number): boolean {
   const dest = state.tableau[column];
   if (!dest) return false;
-  if (dest.length === 0) return moving.value === state.highest;
+  if (dest.length === 0) return true;
   const top = dest[dest.length - 1];
   return Boolean(top && top.faceUp && canPlaceOnCard(state, moving, top));
 }
@@ -197,15 +197,40 @@ export function emptyTableauColumns(state: GameState): number[] {
 }
 
 /**
- * Waste-top king that can fill an empty column: face-up N×13 on waste,
- * plus at least one vacant tableau slot.
+ * Waste top that can fill an empty column (any face-up card is legal).
  */
 export function emptyColumnHint(state: GameState): { wasteId: string; columns: number[] } | null {
   const top = state.waste[state.waste.length - 1];
-  if (!top?.faceUp || top.value !== state.highest) return null;
+  if (!top?.faceUp) return null;
   const columns = emptyTableauColumns(state);
   if (columns.length === 0) return null;
   return { wasteId: top.id, columns };
+}
+
+export function cloneState(state: GameState): GameState {
+  const copy = (card: CardModel): CardModel => ({ ...card });
+  return {
+    multiplier: state.multiplier,
+    lowest: state.lowest,
+    highest: state.highest,
+    stock: state.stock.map(copy),
+    waste: state.waste.map(copy),
+    foundations: state.foundations.map((pile) => pile.map(copy)),
+    tableau: state.tableau.map((pile) => pile.map(copy)),
+  };
+}
+
+/** Send every currently legal waste/tableau top home, repeating as new tops appear. */
+export function autoHomeAll(state: GameState): string[] {
+  const moved: string[] = [];
+  let ids = playableFoundationIds(state);
+  while (ids[0]) {
+    const id = ids[0];
+    if (!playToFoundation(state, id)) break;
+    moved.push(id);
+    ids = playableFoundationIds(state);
+  }
+  return moved;
 }
 
 /** Move a waste or tableau run onto a column. Returns false if the play is illegal. */

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {
   SUITS,
   buildDeck,
+  autoHomeAll,
   canAutoHome,
   canPlaceOnCard,
   canPlayToFoundation,
@@ -97,7 +98,8 @@ assert.equal(canPlaceOnCard(state2, redFour, redTwo), false);
 
 state2.tableau[0] = [];
 assert.equal(canStackOnTableau(state2, { ...redTen, value: 26 }, 0), true);
-assert.equal(canStackOnTableau(state2, { ...redTen, value: 98 }, 0), false);
+assert.equal(canStackOnTableau(state2, { ...redTen, value: 8 }, 0), true);
+assert.equal(canStackOnTableau(state2, redTwo, 0), true);
 
 const wasteCard = { id: "w", value: 7, multiplier: 7, suit: SUITS[1], faceUp: true } as const;
 dealt.waste = [{ ...wasteCard }];
@@ -141,10 +143,9 @@ assert.equal(emptyKing.tableau[3]?.[0]?.value, 26);
 const wasteNotKing = dealKlondike(2, rngFrom(15));
 wasteNotKing.tableau[0] = [];
 wasteNotKing.waste = [{ id: "waste-24", value: 24, multiplier: 2, suit: "clubs", faceUp: true }];
-assert.equal(canStackOnTableau(wasteNotKing, wasteNotKing.waste[0]!, 0), false);
-assert.equal(playToTableau(wasteNotKing, "waste-24", 0), false);
-assert.equal(wasteNotKing.waste.at(-1)?.id, "waste-24");
-assert.equal(wasteNotKing.tableau[0]?.length, 0);
+assert.equal(canStackOnTableau(wasteNotKing, wasteNotKing.waste[0]!, 0), true);
+assert.equal(playToTableau(wasteNotKing, "waste-24", 0), true);
+assert.equal(wasteNotKing.tableau[0]?.[0]?.id, "waste-24");
 
 const tableauNotKing = dealKlondike(2, rngFrom(16));
 tableauNotKing.tableau[0] = [];
@@ -152,10 +153,12 @@ tableauNotKing.tableau[1] = [
   { id: "tab-24", value: 24, multiplier: 2, suit: "spades", faceUp: true },
   { id: "tab-22", value: 22, multiplier: 2, suit: "hearts", faceUp: true },
 ];
-assert.equal(canStackOnTableau(tableauNotKing, tableauNotKing.tableau[1]![0]!, 0), false);
-assert.equal(playToTableau(tableauNotKing, "tab-24", 0), false);
-assert.equal(tableauNotKing.tableau[0]?.length, 0);
-assert.equal(tableauNotKing.tableau[1]?.length, 2);
+assert.equal(canStackOnTableau(tableauNotKing, tableauNotKing.tableau[1]![0]!, 0), true);
+assert.equal(playToTableau(tableauNotKing, "tab-24", 0), true);
+assert.deepEqual(
+  tableauNotKing.tableau[0]?.map((card) => card.id),
+  ["tab-24", "tab-22"],
+);
 
 const kingRun = dealKlondike(2, rngFrom(17));
 kingRun.tableau[0] = [];
@@ -179,7 +182,7 @@ assert.equal(
 );
 assert.equal(
   canStackOnTableau(emptyLevel3, { id: "k36", value: 36, multiplier: 3, suit: "hearts", faceUp: true }, 2),
-  false,
+  true,
 );
 
 const glowHint = dealKlondike(2, rngFrom(19));
@@ -188,7 +191,7 @@ glowHint.waste = [{ id: "glow-26", value: 26, multiplier: 2, suit: "hearts", fac
 assert.deepEqual(emptyTableauColumns(glowHint), [0]);
 assert.deepEqual(emptyColumnHint(glowHint), { wasteId: "glow-26", columns: [0] });
 glowHint.waste = [{ id: "glow-24", value: 24, multiplier: 2, suit: "hearts", faceUp: true }];
-assert.equal(emptyColumnHint(glowHint), null);
+assert.deepEqual(emptyColumnHint(glowHint), { wasteId: "glow-24", columns: [0] });
 glowHint.waste = [{ id: "glow-26b", value: 26, multiplier: 2, suit: "spades", faceUp: true }];
 glowHint.tableau[0] = [{ id: "blocker", value: 8, multiplier: 2, suit: "clubs", faceUp: true }];
 assert.equal(emptyColumnHint(glowHint), null);
@@ -197,7 +200,7 @@ glowHint.stock = [{ id: "next-draw", value: 4, multiplier: 2, suit: "diamonds", 
 assert.ok(emptyColumnHint(glowHint));
 assert.equal(drawFromStock(glowHint), "draw");
 assert.equal(glowHint.waste.at(-1)?.id, "next-draw");
-assert.equal(emptyColumnHint(glowHint), null, "hint stops when the waste top is no longer the highest");
+assert.deepEqual(emptyColumnHint(glowHint), { wasteId: "next-draw", columns: [0] });
 
 const glowPlayed = dealKlondike(2, rngFrom(20));
 glowPlayed.tableau[6] = [];
@@ -263,5 +266,14 @@ assert.equal(canAutoHome(tabHome, "tab-2c"), true);
 assert.equal(playToFoundation(tabHome, "tab-2c"), true);
 assert.equal(tabHome.tableau[2]?.at(-1)?.id, "buried-8");
 assert.equal(tabHome.foundations[2]?.at(-1)?.id, "tab-2c");
+
+const cascade = dealKlondike(2, rngFrom(33));
+cascade.foundations = [[], [], [], []];
+cascade.waste = [{ id: "cas-2h", value: 2, multiplier: 2, suit: "hearts", faceUp: true }];
+cascade.tableau[0] = [{ id: "cas-4h", value: 4, multiplier: 2, suit: "hearts", faceUp: true }];
+assert.deepEqual(autoHomeAll(cascade), ["cas-2h", "cas-4h"]);
+assert.equal(cascade.waste.length, 0);
+assert.equal(cascade.tableau[0]?.length, 0);
+assert.equal(cascade.foundations[0]?.map((card) => card.value).join(","), "2,4");
 
 console.log("rules tests passed");

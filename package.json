@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "test": "node --experimental-strip-types --test src/game/rules.test.ts src/game/layout.test.ts src/game/history.test.ts",
+    "test": "node --experimental-strip-types --test src/game/rules.test.ts src/game/layout.test.ts src/game/history.test.ts src/game/solver.test.ts",
     "preview": "vite preview"
   },
   "dependencies": {
