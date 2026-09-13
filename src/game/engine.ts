@@ -84,6 +84,8 @@ export class SkipCountGame {
   private wastePad: THREE.Mesh | null = null;
   private foundationPads: THREE.Mesh[] = [];
   private tableauPads: THREE.Mesh[] = [];
+  private emptyHalos: THREE.Mesh[] = [];
+  private wasteHalo: THREE.Mesh | null = null;
 
   private state: GameState | null = null;
   private theme: DeckTheme = themeFor(2);
@@ -188,8 +190,27 @@ export class SkipCountGame {
       });
       this.scene.add(pad);
       this.tableauPads.push(pad);
+      this.emptyHalos.push(this.makeHalo());
     }
+    this.wasteHalo = this.makeHalo();
     this.placePads();
+  }
+
+  private makeHalo(): THREE.Mesh {
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(CARD_W * 1.24, CARD_H * 1.24),
+      new THREE.MeshBasicMaterial({
+        color: 0xffe36a,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+      }),
+    );
+    mesh.rotation.x = CARD_LEAN;
+    mesh.raycast = () => {};
+    mesh.visible = false;
+    this.scene.add(mesh);
+    return mesh;
   }
 
   private setupParticles(): void {
@@ -405,6 +426,12 @@ export class SkipCountGame {
     if (this.wastePad) this.wastePad.position.copy(this.wasteOrigin());
     this.foundationPads.forEach((pad, i) => pad.position.copy(this.foundationOrigin(i)));
     this.tableauPads.forEach((pad, i) => pad.position.copy(this.tableauOrigin(i, 0)));
+    if (this.wasteHalo) {
+      this.wasteHalo.position.copy(this.wasteOrigin()).setY(CARD_Y - 0.02);
+    }
+    this.emptyHalos.forEach((halo, i) => {
+      halo.position.copy(this.tableauOrigin(i, 0)).setY(CARD_Y - 0.02);
+    });
   }
 
   private refreshPads(): void {
@@ -967,7 +994,22 @@ export class SkipCountGame {
         mat.emissiveIntensity = 0;
         mat.opacity = 0.18;
       }
+      this.setHalo(this.emptyHalos[index] ?? null, hinted.has(index), pulse);
     });
+    this.setHalo(this.wasteHalo, columns.length > 0 && Boolean(this.state && emptyColumnHint(this.state)), pulse);
+  }
+
+  private setHalo(mesh: THREE.Mesh | null, on: boolean, pulse: number): void {
+    if (!mesh) return;
+    const mat = mesh.material as THREE.MeshBasicMaterial;
+    if (on) {
+      mat.color.set(this.theme.accent2);
+      mat.opacity = 0.4 + pulse * 0.35;
+      mesh.visible = true;
+    } else {
+      mat.opacity = 0;
+      mesh.visible = false;
+    }
   }
 
   private arrangeEmptyKingDemo(): void {
