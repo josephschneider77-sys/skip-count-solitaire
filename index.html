@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#ff4fd8" />
+    <title>Skip Count Solitaire</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Pacifico&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="scene"></canvas>
+
+      <div id="sparkle-layer" aria-hidden="true"></div>
+
+      <header id="hud" hidden>
+        <div class="hud-chip level-chip">
+          <span class="hud-label">Level</span>
+          <strong id="hud-level">2</strong>
+        </div>
+        <div class="hud-chip next-chip">
+          <span class="hud-label">Next number</span>
+          <strong id="hud-next">2</strong>
+        </div>
+        <div class="hud-chip theme-chip">
+          <span class="hud-label">Deck</span>
+          <strong id="hud-theme">2's</strong>
+        </div>
+        <div class="hud-actions">
+          <button type="button" id="btn-hint" class="mini-btn">Hint</button>
+          <button type="button" id="btn-restart" class="mini-btn">Redeal</button>
+          <button type="button" id="btn-menu" class="mini-btn">Menu</button>
+          <button type="button" id="btn-mute" class="mini-btn" aria-label="Mute sounds">🔊</button>
+        </div>
+      </header>
+
+      <p id="hint-line" hidden>Click the deck to draw. Play the next skip-count number on the sparkle pile!</p>
+
+      <section id="title-screen">
+        <div class="title-card">
+          <p class="eyebrow">A cute skip-counting card game</p>
+          <h1>Skip Count<br />Solitaire</h1>
+          <p class="blurb">
+            One rainbow deck at a time! Stack multiples in order — twos, then threes, all the way to tens.
+          </p>
+          <button type="button" id="btn-play" class="play-btn">Play</button>
+          <p class="pick-label">or pick a level</p>
+          <div id="level-picks" class="level-picks"></div>
+          <p class="how">
+            Draw a card, then tap the next number in the skip-count. You can also stack a smaller multiple on a bigger
+            one to peek underneath.
+          </p>
+        </div>
+      </section>
+
+      <section id="win-screen" hidden>
+        <div class="title-card win-card">
+          <p class="eyebrow" id="win-eyebrow">You did it!</p>
+          <h2 id="win-title">Sparkle clear!</h2>
+          <p class="blurb" id="win-blurb">Every multiple found its stack.</p>
+          <div class="win-actions">
+            <button type="button" id="btn-next" class="play-btn">Next level</button>
+            <button type="button" id="btn-win-menu" class="mini-btn ghost">Title</button>
+          </div>
+        </div>
+      </section>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
