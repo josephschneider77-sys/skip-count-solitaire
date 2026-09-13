@@ -2,16 +2,20 @@ import assert from "node:assert/strict";
 import {
   SUITS,
   buildDeck,
+  canAutoHome,
   canPlaceOnCard,
   canPlayToFoundation,
   canStackOnTableau,
+  DOUBLE_TAP_MS,
   dealKlondike,
   deckSize,
   drawFromStock,
   emptyColumnHint,
   emptyTableauColumns,
+  isDoubleTap,
   isWon,
   multiplesUpTo,
+  playToFoundation,
   playToTableau,
   highestMultiple,
   playableWasteId,
@@ -70,6 +74,13 @@ assert.equal(dealt.highest, 91);
 const ace = { id: "a", value: 7, multiplier: 7, suit: SUITS[0], faceUp: true } as const;
 assert.equal(canPlayToFoundation(dealt, { ...ace }), true);
 assert.equal(canPlayToFoundation(dealt, { ...ace, value: 14 }), false);
+
+assert.equal(DOUBLE_TAP_MS >= 300 && DOUBLE_TAP_MS <= 400, true);
+assert.equal(isDoubleTap(null, "c1", 100), false);
+assert.equal(isDoubleTap({ id: "c1", time: 0 }, "c1", 360), true);
+assert.equal(isDoubleTap({ id: "c1", time: 0 }, "c1", 361), false);
+assert.equal(isDoubleTap({ id: "c1", time: 0 }, "c2", 100), false);
+assert.equal(isDoubleTap({ id: "c1", time: 50 }, "c1", 40), false);
 
 const redTen = { id: "r10", value: 10, multiplier: 2, suit: "hearts" as const, faceUp: true };
 const blackEight = { id: "b8", value: 8, multiplier: 2, suit: "spades" as const, faceUp: true };
@@ -223,5 +234,34 @@ assert.deepEqual(
   sameSuitRun.tableau[6]?.map((card) => card.id),
   ["run-6h", "run-4h", "run-2h"],
 );
+
+const autoWaste = dealKlondike(2, rngFrom(30));
+const wasteTwo = { id: "home-2d", value: 2, multiplier: 2, suit: "diamonds" as const, faceUp: true };
+autoWaste.waste = [wasteTwo];
+assert.equal(canAutoHome(autoWaste, "home-2d"), true);
+assert.equal(playToFoundation(autoWaste, "home-2d"), true);
+assert.equal(autoWaste.waste.length, 0);
+assert.equal(autoWaste.foundations[1]?.at(-1)?.id, "home-2d");
+assert.equal(canAutoHome(autoWaste, "home-2d"), false);
+
+const wasteFour = dealKlondike(2, rngFrom(31));
+wasteFour.waste = [{ id: "home-4s", value: 4, multiplier: 2, suit: "spades", faceUp: true }];
+assert.equal(canAutoHome(wasteFour, "home-4s"), false);
+assert.equal(playToFoundation(wasteFour, "home-4s"), false);
+wasteFour.foundations[3] = [{ id: "home-2s", value: 2, multiplier: 2, suit: "spades", faceUp: true }];
+assert.equal(canAutoHome(wasteFour, "home-4s"), true);
+assert.equal(playToFoundation(wasteFour, "home-4s"), true);
+assert.equal(wasteFour.foundations[3]?.at(-1)?.id, "home-4s");
+
+const tabHome = dealKlondike(2, rngFrom(32));
+tabHome.tableau[2] = [
+  { id: "buried-8", value: 8, multiplier: 2, suit: "clubs", faceUp: true },
+  { id: "tab-2c", value: 2, multiplier: 2, suit: "clubs", faceUp: true },
+];
+assert.equal(canAutoHome(tabHome, "buried-8"), false);
+assert.equal(canAutoHome(tabHome, "tab-2c"), true);
+assert.equal(playToFoundation(tabHome, "tab-2c"), true);
+assert.equal(tabHome.tableau[2]?.at(-1)?.id, "buried-8");
+assert.equal(tabHome.foundations[2]?.at(-1)?.id, "tab-2c");
 
 console.log("rules tests passed");

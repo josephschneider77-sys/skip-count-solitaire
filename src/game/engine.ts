@@ -3,6 +3,7 @@ import { Sfx } from "./audio";
 import {
   SUIT_GLYPH,
   SUITS,
+  canAutoHome,
   canPlayToFoundation,
   canStackOnTableau,
   dealKlondike,
@@ -10,7 +11,7 @@ import {
   emptyColumnHint,
   findCard,
   foundationCount,
-  isTopWasteOrTableau,
+  isDoubleTap,
   isWon,
   playableFoundationIds,
   playableWasteId,
@@ -94,6 +95,7 @@ export class SkipCountGame {
   private particles: THREE.Points | null = null;
   private hintUntil = 0;
   private undos: GameSnap[] = [];
+  private lastTap: { id: string; time: number } | null = null;
 
   mount(): void {
     this.setupRenderer();
@@ -265,6 +267,7 @@ export class SkipCountGame {
     this.clearCards();
     this.state = null;
     this.undos = [];
+    this.lastTap = null;
     this.syncUndoButton();
     setHidden("#title-screen", false);
     setHidden("#win-screen", true);
@@ -281,10 +284,13 @@ export class SkipCountGame {
     this.theme = themeFor(multiplier);
     this.selectedId = null;
     this.undos = [];
+    this.lastTap = null;
     this.clearCards();
     this.state = dealKlondike(multiplier);
-    if (import.meta.env.DEV && new URLSearchParams(window.location.search).get("glow") === "1") {
-      this.arrangeEmptyKingDemo();
+    if (import.meta.env.DEV) {
+      const demo = new URLSearchParams(window.location.search);
+      if (demo.get("glow") === "1") this.arrangeEmptyKingDemo();
+      if (demo.get("home") === "1") this.arrangeHomeableDemo();
     }
     this.refreshPads();
     this.fitCamera();
@@ -730,13 +736,16 @@ export class SkipCountGame {
     const card = loc.pile === "waste" ? this.state.waste[loc.index] : this.state.tableau[loc.column ?? 0]?.[loc.index];
     if (!card?.faceUp) return;
 
+    const now = performance.now();
+    if (isDoubleTap(this.lastTap, id, now)) {
+      this.lastTap = { id, time: now };
+      if (canAutoHome(this.state, id)) this.moveToFoundation(id);
+      return;
+    }
+    this.lastTap = { id, time: now };
+
     if (loc.pile === "tableau" && loc.column !== undefined) {
       if (this.tryTableauMove(loc.column)) return;
-    }
-
-    if (loc.pile !== "waste" && isTopWasteOrTableau(this.state, id) && canPlayToFoundation(this.state, card)) {
-      this.moveToFoundation(id);
-      return;
     }
 
     const run = runFrom(this.state, id);
@@ -923,6 +932,7 @@ export class SkipCountGame {
     this.tweens.length = 0;
     this.busy = false;
     this.selectedId = null;
+    this.lastTap = null;
     restoreState(this.state, snap);
     this.snapAllCards();
     this.refreshPads();
@@ -1048,6 +1058,33 @@ export class SkipCountGame {
       if (!card) break;
       card.faceUp = false;
       this.state.stock.unshift(card);
+    }
+  }
+
+  private pullCard(match: (card: CardModel) => boolean): CardModel | undefined {
+    if (!this.state) return undefined;
+    const piles = [this.state.stock, this.state.waste, ...this.state.foundations, ...this.state.tableau];
+    for (const pile of piles) {
+      const index = pile.findIndex(match);
+      if (index < 0) continue;
+      const [card] = pile.splice(index, 1);
+      return card;
+    }
+    return undefined;
+  }
+
+  private arrangeHomeableDemo(): void {
+    if (!this.state) return;
+    const lowest = this.state.lowest;
+    const first = this.pullCard((card) => card.value === lowest);
+    const second = this.pullCard((card) => card.value === lowest);
+    if (first) {
+      first.faceUp = true;
+      this.state.waste.push(first);
+    }
+    if (second) {
+      second.faceUp = true;
+      this.state.tableau[1]?.push(second);
     }
   }
 
