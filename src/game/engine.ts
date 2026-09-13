@@ -192,13 +192,13 @@ export class SkipCountGame {
       this.tableauPads.push(pad);
       this.emptyHalos.push(this.makeHalo());
     }
-    this.wasteHalo = this.makeHalo();
+    this.wasteHalo = this.makeHalo(1.85);
     this.placePads();
   }
 
-  private makeHalo(): THREE.Mesh {
+  private makeHalo(scale = 1.55): THREE.Mesh {
     const mesh = new THREE.Mesh(
-      new THREE.PlaneGeometry(CARD_W * 1.55, CARD_H * 1.55),
+      new THREE.PlaneGeometry(CARD_W * scale, CARD_H * scale),
       new THREE.MeshBasicMaterial({
         map: makeHaloTexture(this.theme),
         transparent: true,
