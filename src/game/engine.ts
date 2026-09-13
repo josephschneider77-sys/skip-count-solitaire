@@ -21,13 +21,14 @@ import {
 import { themeFor, type DeckTheme } from "./themes";
 import { edgeMaterial, makeBackTexture, makeFaceTexture, makePadTexture, makeTableTexture } from "./textures";
 
-const CARD_W = 1.48;
-const CARD_H = 2.1;
+const CARD_W = 1.42;
+const CARD_H = 2.02;
 const CARD_D = 0.05;
-const CARD_LEAN = -0.28;
-const COL_GAP = 1.72;
-const TABLEAU_Z0 = 0.15;
-const CASCADE = 0.48;
+const CARD_LEAN = -0.26;
+const COL_GAP = 1.54;
+const TABLEAU_Z0 = 0.2;
+const CASCADE = 0.4;
+const TOP_Z = -2.55;
 
 type CardView = {
   model: CardModel;
@@ -91,6 +92,7 @@ export class SkipCountGame {
     this.bindUi();
     this.fitCamera();
     window.addEventListener("resize", () => this.resize());
+    window.visualViewport?.addEventListener("resize", () => this.resize());
     this.canvas.addEventListener("pointerdown", (event) => this.onPointer(event));
     this.resize();
     this.renderer.setAnimationLoop(() => this.tick());
@@ -314,6 +316,7 @@ export class SkipCountGame {
       this.animateTo(view, this.poseFor(card.id), card.faceUp ? 0 : Math.PI, 0.32, delay, () => {
         if (index === queue.length - 1) {
           this.busy = false;
+          this.fitCamera();
           this.syncHighlights();
         }
       });
@@ -322,21 +325,24 @@ export class SkipCountGame {
     if (queue.length === 0) this.busy = false;
   }
 
+  private colX(column: number): number {
+    return (column - 3) * COL_GAP;
+  }
+
   private stockOrigin(): THREE.Vector3 {
-    return new THREE.Vector3(-5.15, 1.05, -3.35);
+    return new THREE.Vector3(this.colX(0), 1.02, TOP_Z);
   }
 
   private wasteOrigin(): THREE.Vector3 {
-    return new THREE.Vector3(-3.35, 1.05, -3.35);
+    return new THREE.Vector3(this.colX(1), 1.02, TOP_Z);
   }
 
   private foundationOrigin(column: number): THREE.Vector3 {
-    return new THREE.Vector3(-0.15 + column * COL_GAP, 1.05, -3.35);
+    return new THREE.Vector3(this.colX(3 + column), 1.02, TOP_Z);
   }
 
   private tableauOrigin(column: number, index: number): THREE.Vector3 {
-    const x = -3 * COL_GAP + column * COL_GAP;
-    return new THREE.Vector3(x, 1.05 + index * 0.01, TABLEAU_Z0 + index * CASCADE);
+    return new THREE.Vector3(this.colX(column), 1.02 + index * 0.01, TABLEAU_Z0 + index * CASCADE);
   }
 
   private placePads(): void {
@@ -388,9 +394,89 @@ export class SkipCountGame {
     return this.tableauOrigin(loc.column ?? 0, loc.index);
   }
 
+  private boardBounds(): THREE.Box3 {
+    const box = new THREE.Box3();
+    const hx = CARD_W * 0.55;
+    const hy = CARD_H * 0.55;
+    const maxCascade = this.state
+      ? Math.max(7, ...this.state.tableau.map((col) => col.length + 1))
+      : 7;
+    const anchors: THREE.Vector3[] = [
+      this.stockOrigin(),
+      this.wasteOrigin(),
+      ...[0, 1, 2, 3].map((i) => this.foundationOrigin(i)),
+    ];
+    for (let column = 0; column < 7; column += 1) {
+      anchors.push(this.tableauOrigin(column, 0));
+      anchors.push(this.tableauOrigin(column, maxCascade - 1));
+    }
+    anchors.forEach((point) => {
+      box.expandByPoint(new THREE.Vector3(point.x - hx, 0, point.z - 0.25));
+      box.expandByPoint(new THREE.Vector3(point.x + hx, 2.15, point.z + hy));
+    });
+    return box;
+  }
+
+  private ndcMargins(): { side: number; top: number; bottom: number } {
+    const height = this.canvas.clientHeight || window.innerHeight || 1;
+    const hud = document.querySelector("#hud");
+    const hint = document.querySelector("#hint-line");
+    const hudH = hud instanceof HTMLElement && !hud.hidden ? hud.getBoundingClientRect().height + 10 : 12;
+    const hintH = hint instanceof HTMLElement && !hint.hidden ? hint.getBoundingClientRect().height + 14 : 16;
+    return {
+      side: 0.07,
+      top: (hudH / height) * 2 + 0.08,
+      bottom: (hintH / height) * 2 + 0.07,
+    };
+  }
+
+  private boxFitsInView(box: THREE.Box3, side: number, top: number, bottom: number): boolean {
+    const corners = [
+      new THREE.Vector3(box.min.x, box.min.y, box.min.z),
+      new THREE.Vector3(box.min.x, box.min.y, box.max.z),
+      new THREE.Vector3(box.min.x, box.max.y, box.min.z),
+      new THREE.Vector3(box.min.x, box.max.y, box.max.z),
+      new THREE.Vector3(box.max.x, box.min.y, box.min.z),
+      new THREE.Vector3(box.max.x, box.min.y, box.max.z),
+      new THREE.Vector3(box.max.x, box.max.y, box.min.z),
+      new THREE.Vector3(box.max.x, box.max.y, box.max.z),
+    ];
+    const projected = new THREE.Vector3();
+    return corners.every((corner) => {
+      projected.copy(corner).project(this.camera);
+      return (
+        projected.x >= -1 + side &&
+        projected.x <= 1 - side &&
+        projected.y >= -1 + bottom &&
+        projected.y <= 1 - top &&
+        projected.z >= -1 &&
+        projected.z <= 1
+      );
+    });
+  }
+
   private fitCamera(): void {
-    this.camera.position.set(0, 7.4, 14.2);
-    this.camera.lookAt(0, 0.7, 0.4);
+    const aspect = this.canvas.clientWidth / Math.max(1, this.canvas.clientHeight);
+    this.camera.aspect = aspect || 1;
+    this.camera.fov = aspect < 0.7 ? 52 : aspect < 1 ? 46 : 38;
+    const box = this.boardBounds();
+    const center = box.getCenter(new THREE.Vector3());
+    const look = new THREE.Vector3(center.x, Math.max(0.45, center.y * 0.55), center.z);
+    const direction = new THREE.Vector3(0, 0.58, 1).normalize();
+    const { side, top, bottom } = this.ndcMargins();
+    let near = 6;
+    let far = 56;
+    for (let i = 0; i < 18; i += 1) {
+      const mid = (near + far) / 2;
+      this.camera.position.copy(look).addScaledVector(direction, mid);
+      this.camera.lookAt(look);
+      this.camera.updateMatrixWorld();
+      this.camera.updateProjectionMatrix();
+      if (this.boxFitsInView(box, side, top, bottom)) far = mid;
+      else near = mid;
+    }
+    this.camera.position.copy(look).addScaledVector(direction, far * 1.04);
+    this.camera.lookAt(look);
     this.camera.updateProjectionMatrix();
   }
 
@@ -550,6 +636,7 @@ export class SkipCountGame {
     this.relayoutExposed();
     this.animateTo(view, this.poseFor(card.id), 0, 0.34, 0, () => {
       this.busy = false;
+      this.fitCamera();
       this.refreshPads();
       this.syncHud();
       this.syncHighlights();
@@ -579,6 +666,7 @@ export class SkipCountGame {
         left -= 1;
         if (left <= 0) {
           this.busy = false;
+          this.fitCamera();
           this.syncHighlights();
         }
       });
@@ -628,7 +716,7 @@ export class SkipCountGame {
     setText("#hud-theme", this.theme.label);
     const hint = document.querySelector("#hint-line");
     if (hint) {
-      hint.textContent = `Klondike: draw, build each suit ${this.state.lowest}→${this.state.highest} by ${this.state.multiplier}s. Stack down and switch colors. Empty columns want ${this.state.highest}. Stock ${this.state.stock.length}.`;
+      hint.textContent = `Draw. Homes ${this.state.lowest}→${this.state.highest} by ${this.state.multiplier}s. Stack down, switch colors. Empty wants ${this.state.highest}.`;
     }
   }
 
