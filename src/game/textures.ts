@@ -265,12 +265,12 @@ function drawRankBadge(
   originY: number,
   rotate: boolean,
 ): void {
-  const preferred = valueText.length >= 3 ? 52 : valueText.length === 2 ? 62 : 70;
-  const size = fitRankFont(ctx, valueText, 148, preferred, 36);
+  const preferred = valueText.length >= 3 ? 78 : valueText.length === 2 ? 92 : 104;
+  const size = fitRankFont(ctx, valueText, 196, preferred, 48);
   ctx.font = `900 ${size}px 'Baloo 2', 'Trebuchet MS', sans-serif`;
   const tw = ctx.measureText(valueText).width;
-  const badgeW = Math.min(188, Math.max(78, tw + 26));
-  const badgeH = size + 46;
+  const badgeW = Math.min(240, Math.max(96, tw + 32));
+  const badgeH = size + 52;
 
   ctx.save();
   if (rotate) {
@@ -280,21 +280,30 @@ function drawRankBadge(
     ctx.translate(originX, originY);
   }
 
-  ctx.fillStyle = "rgba(255,253,250,0.96)";
-  roundRect(ctx, 0, 0, badgeW, badgeH, 16);
+  ctx.fillStyle = "rgba(255,253,250,0.98)";
+  roundRect(ctx, 0, 0, badgeW, badgeH, 18);
   ctx.fill();
   ctx.strokeStyle = rim;
-  ctx.lineWidth = 4;
-  roundRect(ctx, 0, 0, badgeW, badgeH, 16);
+  ctx.lineWidth = 5;
+  roundRect(ctx, 0, 0, badgeW, badgeH, 18);
   ctx.stroke();
 
-  ctx.fillStyle = suitInk;
   ctx.textAlign = "left";
   ctx.textBaseline = "alphabetic";
   ctx.font = `900 ${size}px 'Baloo 2', 'Trebuchet MS', sans-serif`;
-  ctx.fillText(valueText, 12, size + 6);
-  ctx.font = "800 28px serif";
-  ctx.fillText(glyph, 12, size + 34);
+  ctx.lineJoin = "round";
+  ctx.miterLimit = 2;
+  ctx.strokeStyle = "#fffdf8";
+  ctx.lineWidth = 6;
+  ctx.strokeText(valueText, 14, size + 8);
+  ctx.fillStyle = suitInk;
+  ctx.fillText(valueText, 14, size + 8);
+  ctx.font = "800 32px serif";
+  ctx.strokeStyle = "#fffdf8";
+  ctx.lineWidth = 4;
+  ctx.strokeText(glyph, 14, size + 40);
+  ctx.fillStyle = suitInk;
+  ctx.fillText(glyph, 14, size + 40);
   ctx.restore();
 }
 
@@ -347,12 +356,12 @@ export function makeFaceTexture(theme: DeckTheme, value: number, suit: Suit): TH
     ctx.restore();
 
     const iconSpots: Array<[number, number, number]> = [
-      [156, 236, 48],
-      [356, 236, 48],
-      [116, 392, 42],
-      [396, 392, 42],
-      [168, 536, 46],
-      [344, 536, 46],
+      [168, 268, 44],
+      [344, 268, 44],
+      [120, 410, 40],
+      [392, 410, 40],
+      [176, 548, 44],
+      [336, 548, 44],
     ];
     iconSpots.forEach(([x, y, size], i) => {
       const color = i % 2 === 0 ? theme.accent : theme.accent2;
@@ -371,8 +380,8 @@ export function makeFaceTexture(theme: DeckTheme, value: number, suit: Suit): TH
     ctx.fillText(glyph, FACE_W / 2, FACE_H / 2 + 62);
 
     const valueText = String(value);
-    drawRankBadge(ctx, valueText, glyph, suitInk, theme.accent, 40, 48, false);
-    drawRankBadge(ctx, valueText, glyph, suitInk, theme.accent, FACE_W - 40, FACE_H - 48, true);
+    drawRankBadge(ctx, valueText, glyph, suitInk, theme.accent, 34, 44, false);
+    drawRankBadge(ctx, valueText, glyph, suitInk, theme.accent, FACE_W - 34, FACE_H - 44, true);
   });
 }
 
