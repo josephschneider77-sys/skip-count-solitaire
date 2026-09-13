@@ -138,7 +138,15 @@ export class SkipCountGame {
     this.stockPad.rotation.x = CARD_LEAN;
     this.stockPad.userData.pad = "stock";
     this.scene.add(this.stockPad);
-    this.wastePad = new THREE.Mesh(padGeo.clone(), padMat.clone());
+    this.wastePad = new THREE.Mesh(
+      padGeo.clone(),
+      new THREE.MeshStandardMaterial({
+        color: 0xff8ad8,
+        transparent: true,
+        opacity: 0.22,
+        roughness: 0.6,
+      }),
+    );
     this.wastePad.rotation.x = CARD_LEAN;
     this.wastePad.userData.pad = "waste";
     this.scene.add(this.wastePad);
@@ -412,9 +420,8 @@ export class SkipCountGame {
   }
 
   private boardAnchors(): THREE.Vector3[] {
-    const slack = 1;
     const maxCascade = this.state
-      ? Math.max(1, ...this.state.tableau.map((col) => col.length)) + slack
+      ? Math.max(1, ...this.state.tableau.map((col) => col.length))
       : 7;
     const wasteFan = this.layout().wasteFan * 2;
     const anchors: THREE.Vector3[] = [
@@ -516,9 +523,9 @@ export class SkipCountGame {
     const look = new THREE.Vector3(center.x, 0.2, center.z);
     const direction =
       aspect < 0.75
-        ? new THREE.Vector3(0, 0.7, 0.95).normalize()
+        ? new THREE.Vector3(0, 1.08, 0.62).normalize()
         : aspect < 1
-          ? new THREE.Vector3(0, 0.78, 0.9).normalize()
+          ? new THREE.Vector3(0, 0.82, 0.88).normalize()
           : new THREE.Vector3(0, 0.58, 1).normalize();
     const { side, top, bottom } = this.ndcMargins();
     const vFov = THREE.MathUtils.degToRad(this.camera.fov);

@@ -317,6 +317,12 @@ h2 {
 @media (max-width: 430px) {
   #hud {
     gap: 4px;
+    flex-wrap: wrap;
+  }
+
+  .hud-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
 
   .hud-chip {
