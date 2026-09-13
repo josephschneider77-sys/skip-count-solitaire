@@ -142,21 +142,27 @@ export class SkipCountGame {
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
-    this.scene.background = new THREE.Color("#5b1f86");
-    this.scene.fog = new THREE.Fog("#5b1f86", 20, 40);
+    this.scene.background = new THREE.Color("#4a1288");
+    this.scene.fog = new THREE.Fog("#4a1288", 22, 42);
   }
 
   private setupLights(): void {
-    this.scene.add(new THREE.AmbientLight(0xffd6f8, 0.72));
-    const key = new THREE.DirectionalLight(0xffffff, 1.15);
-    key.position.set(-4, 14, 8);
+    this.scene.add(new THREE.AmbientLight(0xf0d6ff, 0.78));
+    const key = new THREE.DirectionalLight(0xffffff, 1.08);
+    key.position.set(-3, 16, 6);
     this.scene.add(key);
-    const pink = new THREE.PointLight(0xff4fd8, 18, 28);
-    pink.position.set(-6, 4, 2);
-    this.scene.add(pink);
-    const cyan = new THREE.PointLight(0x7dffd8, 14, 26);
-    cyan.position.set(7, 4, 1);
-    this.scene.add(cyan);
+    const purple = new THREE.PointLight(0xb56bff, 20, 30);
+    purple.position.set(-5, 5, 1);
+    this.scene.add(purple);
+    const magenta = new THREE.PointLight(0xff4ad8, 14, 26);
+    magenta.position.set(2, 4, -2);
+    this.scene.add(magenta);
+    const teal = new THREE.PointLight(0x3ad4ff, 12, 24);
+    teal.position.set(7, 4, 2);
+    this.scene.add(teal);
+    const lemon = new THREE.PointLight(0xffe14a, 8, 18);
+    lemon.position.set(0, 6, 4);
+    this.scene.add(lemon);
   }
 
   private setupTable(): void {
@@ -164,8 +170,8 @@ export class SkipCountGame {
       new THREE.CircleGeometry(18, 64),
       new THREE.MeshStandardMaterial({
         map: makeTableTexture(),
-        roughness: 0.55,
-        metalness: 0.12,
+        roughness: 0.42,
+        metalness: 0.22,
       }),
     );
     table.rotation.x = -Math.PI / 2;
@@ -187,7 +193,7 @@ export class SkipCountGame {
     this.wastePad = new THREE.Mesh(
       padGeo.clone(),
       new THREE.MeshStandardMaterial({
-        color: 0xff8ad8,
+        color: 0xc77dff,
         transparent: true,
         opacity: 0.22,
         roughness: 0.6,
@@ -211,9 +217,9 @@ export class SkipCountGame {
       pad.userData.pad = "tableau";
       pad.userData.column = i;
       pad.material = new THREE.MeshStandardMaterial({
-        color: 0xff8ad8,
+        color: 0x8a2be2,
         transparent: true,
-        opacity: 0.18,
+        opacity: 0.2,
         roughness: 0.6,
       });
       this.scene.add(pad);
@@ -254,7 +260,7 @@ export class SkipCountGame {
     geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
     this.particles = new THREE.Points(
       geo,
-      new THREE.PointsMaterial({ color: 0xffe36a, size: 0.09, transparent: true, opacity: 0.8 }),
+      new THREE.PointsMaterial({ color: 0xffe14a, size: 0.1, transparent: true, opacity: 0.88 }),
     );
     this.scene.add(this.particles);
   }
@@ -301,7 +307,7 @@ export class SkipCountGame {
     setHidden("#hint-line", true);
   }
 
-  private startLevel(multiplier: number): void {
+  private async startLevel(multiplier: number): Promise<void> {
     this.sfx.select();
     setHidden("#title-screen", true);
     setHidden("#win-screen", true);
@@ -326,8 +332,24 @@ export class SkipCountGame {
     });
     this.syncHud();
     this.syncUndoButton();
+    await this.readyCardFonts();
     this.buildCards();
     this.dealIntro();
+  }
+
+  private async readyCardFonts(): Promise<void> {
+    const fonts = document.fonts;
+    if (!fonts?.load) return;
+    try {
+      await Promise.race([
+        Promise.all([fonts.load("900 64px 'Baloo 2'"), fonts.load("800 48px 'Baloo 2'")]),
+        new Promise<void>((resolve) => {
+          window.setTimeout(resolve, 800);
+        }),
+      ]);
+    } catch {
+      // Trebuchet fallback still measures and fits inside the rank badge.
+    }
   }
 
   private clearCards(): void {
@@ -365,8 +387,8 @@ export class SkipCountGame {
         edge.clone(),
         edge.clone(),
         edge.clone(),
-        new THREE.MeshStandardMaterial({ map: face, roughness: 0.35, metalness: 0.04 }),
-        new THREE.MeshStandardMaterial({ map: back, roughness: 0.4, metalness: 0.08 }),
+        new THREE.MeshStandardMaterial({ map: face, roughness: 0.28, metalness: 0.12 }),
+        new THREE.MeshStandardMaterial({ map: back, roughness: 0.32, metalness: 0.18 }),
       ];
       const mesh = new THREE.Mesh(this.sharedGeo, materials);
       const flipper = new THREE.Group();

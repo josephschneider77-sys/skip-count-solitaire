@@ -1,8 +1,8 @@
 export const CARD_W = 1.42;
 export const CARD_H = 2.02;
-export const CARD_D = 0.05;
-/** Almost flat on the table so faces point up at a top-down camera. */
-export const CARD_LEAN = -Math.PI / 2 + 0.16;
+export const CARD_D = 0.07;
+/** Almost flat so ranks stay readable; a tiny lift shows a sliver of thickness. */
+export const CARD_LEAN = -Math.PI / 2 + 0.05;
 export const CARD_Y = 0.06;
 
 export type LayoutMetrics = {
@@ -31,9 +31,9 @@ export function columnX(column: number, colGap: number): number {
 }
 
 export function ndcSideMargin(aspect: number): number {
-  if (aspect < 0.68) return 0.04;
-  if (aspect < 1) return 0.06;
-  return 0.08;
+  if (aspect < 0.68) return 0.05;
+  if (aspect < 1) return 0.07;
+  return 0.09;
 }
 
 function normalize3(x: number, y: number, z: number): { x: number; y: number; z: number } {
@@ -41,10 +41,10 @@ function normalize3(x: number, y: number, z: number): { x: number; y: number; z:
   return { x: x / length, y: y / length, z: z / length };
 }
 
-/** Nearly straight down; a tiny +Z keeps the table oriented toward the player. */
+/** Nearly straight down with a tiny forward/side tilt — 3D-ish, not a strong iso. */
 export function cameraDirection(aspect: number): { x: number; y: number; z: number } {
   void aspect;
-  return normalize3(0, 1, 0.08);
+  return normalize3(0.06, 1, 0.11);
 }
 
 export function orthoHalfExtents(
