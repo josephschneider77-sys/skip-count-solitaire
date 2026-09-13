@@ -13,11 +13,12 @@ import {
   type GameState,
 } from "./rules";
 import { deckValues, tableauColumnCount, themeFor, type DeckTheme } from "./themes";
-import { edgeMaterial, makeBackTexture, makeFaceTexture, makeTableTexture } from "./textures";
+import { edgeMaterial, makeBackTexture, makeFaceTexture, makePadTexture, makeTableTexture } from "./textures";
 
-const CARD_W = 1.28;
-const CARD_H = 1.82;
-const CARD_D = 0.045;
+const CARD_W = 1.58;
+const CARD_H = 2.24;
+const CARD_D = 0.06;
+const CARD_LEAN = -0.3;
 
 type CardView = {
   model: CardModel;
@@ -79,8 +80,7 @@ export class SkipCountGame {
     this.setupTable();
     this.setupParticles();
     this.bindUi();
-    this.camera.position.set(0, 15.4, 11.2);
-    this.camera.lookAt(0, 0, 1.2);
+    this.fitCamera();
     window.addEventListener("resize", () => this.resize());
     this.canvas.addEventListener("pointerdown", (event) => this.onPointer(event));
     this.resize();
@@ -134,22 +134,20 @@ export class SkipCountGame {
     ring.position.y = 0.01;
     this.scene.add(ring);
 
+    const padGeo = new THREE.PlaneGeometry(CARD_W, CARD_H);
     const padMat = new THREE.MeshStandardMaterial({
-      color: 0xff8ad8,
-      roughness: 0.35,
-      metalness: 0.15,
+      color: 0xffffff,
+      roughness: 0.4,
+      metalness: 0.08,
       transparent: true,
-      opacity: 0.42,
+      opacity: 0.92,
     });
-    this.stockPad = new THREE.Mesh(new THREE.CircleGeometry(0.95, 36), padMat);
-    this.stockPad.rotation.x = -Math.PI / 2;
+    this.stockPad = new THREE.Mesh(padGeo, padMat);
+    this.stockPad.rotation.x = CARD_LEAN;
     this.stockPad.userData.pad = "stock";
     this.scene.add(this.stockPad);
-    this.foundationPad = new THREE.Mesh(
-      new THREE.CircleGeometry(0.95, 36),
-      padMat.clone(),
-    );
-    this.foundationPad.rotation.x = -Math.PI / 2;
+    this.foundationPad = new THREE.Mesh(padGeo.clone(), padMat.clone());
+    this.foundationPad.rotation.x = CARD_LEAN;
     this.foundationPad.userData.pad = "foundation";
     this.scene.add(this.foundationPad);
     this.placePads();
@@ -221,6 +219,8 @@ export class SkipCountGame {
     this.clearCards();
     const values = deckValues(multiplier);
     this.state = dealState(multiplier, values, tableauColumnCount(values.length));
+    this.fitCamera();
+    this.refreshPads();
     this.syncHud();
     this.buildCards();
     this.dealIntro();
@@ -265,7 +265,7 @@ export class SkipCountGame {
       const flipper = new THREE.Group();
       flipper.add(mesh);
       const tilt = new THREE.Group();
-      tilt.rotation.x = -Math.PI / 2;
+      tilt.rotation.x = CARD_LEAN;
       tilt.add(flipper);
       const group = new THREE.Group();
       group.add(tilt);
@@ -297,7 +297,10 @@ export class SkipCountGame {
       view.group.position.copy(this.stockPose(0).position);
       view.flipper.rotation.y = Math.PI;
       this.animateTo(view, this.poseFor(card.id).position, 0, 0.44, delay, () => {
-        if (index === queue.length - 1) this.busy = false;
+        if (index === queue.length - 1) {
+          this.busy = false;
+          this.syncHighlights();
+        }
       });
       delay += 0.045;
     });
@@ -306,21 +309,42 @@ export class SkipCountGame {
 
   private placePads(): void {
     const origin = this.stockOrigin();
-    if (this.stockPad) this.stockPad.position.set(origin.x, 0.02, origin.z);
+    if (this.stockPad) this.stockPad.position.set(origin.x, 1.08, origin.z);
     if (this.foundationPad) {
-      const right = origin.x + Math.max(9.2, ((this.state?.tableau.length ?? 4) + 1) * 1.55);
-      this.foundationPad.position.set(right, 0.02, origin.z);
+      this.foundationPad.position.set(this.foundationX(), 1.08, origin.z);
     }
+  }
+
+  private refreshPads(): void {
+    this.placePads();
+    if (!this.stockPad || !this.foundationPad) return;
+    const draw = makePadTexture("DRAW", this.theme.label, this.theme);
+    const next = makePadTexture("NEXT", this.state ? String(nextNeeded(this.state)) : this.theme.label, this.theme);
+    const stockMat = this.stockPad.material as THREE.MeshStandardMaterial;
+    const foundMat = this.foundationPad.material as THREE.MeshStandardMaterial;
+    stockMat.map?.dispose();
+    foundMat.map?.dispose();
+    stockMat.map = draw;
+    foundMat.map = next;
+    stockMat.needsUpdate = true;
+    foundMat.needsUpdate = true;
   }
 
   private stockOrigin(): THREE.Vector3 {
     const columns = this.state?.tableau.length ?? 4;
-    return new THREE.Vector3(-Math.max(4.2, columns * 0.82), 0, -3.15);
+    const span = (columns - 1) * 1.82;
+    return new THREE.Vector3(-span / 2 - 0.15, 0, -2.55);
+  }
+
+  private foundationX(): number {
+    const columns = this.state?.tableau.length ?? 4;
+    const span = (columns - 1) * 1.82;
+    return span / 2 + 0.15;
   }
 
   private stockPose(indexFromTop: number): { position: THREE.Vector3 } {
     const origin = this.stockOrigin();
-    return { position: new THREE.Vector3(origin.x, 0.03 + indexFromTop * 0.012, origin.z) };
+    return { position: new THREE.Vector3(origin.x, 1.08 + indexFromTop * 0.012, origin.z) };
   }
 
   private poseFor(id: string): { position: THREE.Vector3 } {
@@ -329,21 +353,28 @@ export class SkipCountGame {
     const origin = this.stockOrigin();
     if (!loc) return { position: origin.clone() };
     if (loc.pile === "stock") {
-      const fromBottom = loc.index;
-      return { position: new THREE.Vector3(origin.x, 0.03 + fromBottom * 0.012, origin.z) };
+      return { position: new THREE.Vector3(origin.x, 1.08 + loc.index * 0.012, origin.z - loc.index * 0.008) };
     }
     if (loc.pile === "waste") {
-      return { position: new THREE.Vector3(origin.x + 1.7, 0.04 + loc.index * 0.012, origin.z + 0.08 * Math.min(loc.index, 3)) };
+      return { position: new THREE.Vector3(origin.x + 1.9, 1.08 + loc.index * 0.012, origin.z) };
     }
     if (loc.pile === "foundation") {
-      const right = origin.x + Math.max(9.2, (this.state.tableau.length + 1) * 1.55);
-      return { position: new THREE.Vector3(right, 0.05 + loc.index * 0.014, origin.z) };
+      return { position: new THREE.Vector3(this.foundationX(), 1.1 + loc.index * 0.012, origin.z) };
     }
     const columns = this.state.tableau.length;
-    const span = (columns - 1) * 1.58;
-    const x = -span / 2 + (loc.column ?? 0) * 1.58;
-    const z = -0.35 + loc.index * 0.46;
-    return { position: new THREE.Vector3(x, 0.04 + loc.index * 0.01, z) };
+    const span = (columns - 1) * 1.82;
+    const x = -span / 2 + (loc.column ?? 0) * 1.82;
+    const z = 0.35 + loc.index * 0.7;
+    return { position: new THREE.Vector3(x, 1.08 + loc.index * 0.012, z) };
+  }
+
+  private fitCamera(): void {
+    const columns = this.state?.tableau.length ?? 4;
+    const width = Math.max(11, columns * 1.9 + 3.4);
+    const dist = Math.max(12.6, width * 0.92);
+    this.camera.position.set(0, 6.15, dist);
+    this.camera.lookAt(0, 0.95, 0.15);
+    this.camera.updateProjectionMatrix();
   }
 
   private animateTo(
@@ -360,7 +391,7 @@ export class SkipCountGame {
       to: to.clone(),
       fromFlip: view.flipper.rotation.y,
       toFlip,
-      hop: 0.55,
+      hop: 1.15,
       delay,
       duration,
       elapsed: 0,
@@ -421,6 +452,11 @@ export class SkipCountGame {
     if (!this.state) return;
     const loc = findCard(this.state, id);
     if (!loc) return;
+    const model = this.cards.get(id)?.model;
+    if (model && loc.pile !== "foundation" && canPlayToFoundation(this.state, model)) {
+      this.moveToFoundation(id);
+      return;
+    }
     if (loc.pile === "tableau" && this.selectedId && this.selectedId !== id) {
       const selected = this.cards.get(this.selectedId)?.model;
       if (selected && loc.column !== undefined && canStackOnTableau(this.state, selected, loc.column)) {
@@ -431,11 +467,6 @@ export class SkipCountGame {
     if (!isTopPlayable(this.state, id)) {
       this.selectedId = null;
       this.syncHighlights();
-      return;
-    }
-    const model = this.cards.get(id)?.model;
-    if (model && canPlayToFoundation(this.state, model)) {
-      this.moveToFoundation(id);
       return;
     }
     this.selectedId = this.selectedId === id ? null : id;
@@ -493,10 +524,12 @@ export class SkipCountGame {
     this.sfx.place();
     this.animateTo(view, this.poseFor(id).position, 0, 0.36, 0, () => {
       this.busy = false;
+      this.refreshPads();
       this.syncHud();
       this.syncHighlights();
       this.checkWin();
     });
+    this.refreshPads();
     this.syncHud();
   }
 
@@ -549,22 +582,22 @@ export class SkipCountGame {
     setText("#hud-theme", this.theme.label);
     const hint = document.querySelector("#hint-line");
     if (hint) {
-      hint.textContent = `Tap the deck to draw. Build ${this.theme.label} : ${this.state.multiplier}, ${this.state.multiplier * 2}, ${this.state.multiplier * 3}…`;
+      hint.textContent = `Glow cards are next! Tap ${nextNeeded(this.state)}, then keep skip-counting ${this.theme.label}.`;
     }
   }
 
   private syncHighlights(): void {
     if (!this.state) return;
     const playable = new Set(playableCardIds(this.state));
-    const showHint = performance.now() < this.hintUntil;
+    const boost = performance.now() < this.hintUntil;
     this.cards.forEach((view, id) => {
       const mats = view.mesh.material as THREE.MeshStandardMaterial[];
       const face = mats[4];
       if (!face) return;
       const selected = this.selectedId === id;
-      const hinted = showHint && playable.has(id);
-      face.emissive = new THREE.Color(selected ? this.theme.glow : hinted ? this.theme.accent2 : "#000000");
-      face.emissiveIntensity = selected ? 0.55 : hinted ? 0.4 : 0;
+      const ready = playable.has(id);
+      face.emissive = new THREE.Color(selected ? this.theme.glow : ready ? this.theme.accent2 : "#000000");
+      face.emissiveIntensity = selected ? 0.7 : ready ? (boost ? 0.85 : 0.45) : 0;
     });
   }
 
@@ -573,7 +606,8 @@ export class SkipCountGame {
     const height = this.canvas.clientHeight || window.innerHeight;
     this.renderer.setSize(width, height, false);
     this.camera.aspect = width / height;
-    this.camera.fov = width < 700 ? 50 : 42;
+    this.camera.fov = width < 700 ? 44 : 36;
+    this.fitCamera();
     this.camera.updateProjectionMatrix();
   }
 
