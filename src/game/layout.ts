@@ -1,8 +1,8 @@
 export const CARD_W = 1.42;
 export const CARD_H = 2.02;
 export const CARD_D = 0.07;
-/** Almost flat so ranks stay readable; a tiny lift shows card thickness. */
-export const CARD_LEAN = -Math.PI / 2 + 0.08;
+/** Almost flat so ranks stay readable; a tiny lift shows a sliver of thickness. */
+export const CARD_LEAN = -Math.PI / 2 + 0.05;
 export const CARD_Y = 0.06;
 
 export type LayoutMetrics = {
@@ -41,10 +41,10 @@ function normalize3(x: number, y: number, z: number): { x: number; y: number; z:
   return { x: x / length, y: y / length, z: z / length };
 }
 
-/** Mostly top-down with a light isometric offset — faces stay readable. */
+/** Nearly straight down with a tiny forward/side tilt — 3D-ish, not a strong iso. */
 export function cameraDirection(aspect: number): { x: number; y: number; z: number } {
   void aspect;
-  return normalize3(0.12, 1, 0.18);
+  return normalize3(0.06, 1, 0.11);
 }
 
 export function orthoHalfExtents(
