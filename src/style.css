@@ -117,6 +117,7 @@ body,
   padding: 8px 14px;
   font-weight: 800;
   box-shadow: 0 5px 0 #d39a1a;
+  white-space: nowrap;
 }
 
 .mini-btn:active {

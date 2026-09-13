@@ -343,3 +343,33 @@ export function makeTableTexture(): THREE.CanvasTexture {
 export function edgeMaterial(color: string): THREE.MeshStandardMaterial {
   return new THREE.MeshStandardMaterial({ color, roughness: 0.45, metalness: 0.08 });
 }
+
+export function makePadTexture(title: string, subtitle: string, theme: DeckTheme): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 768;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Could not make pad art");
+  const bg = ctx.createLinearGradient(0, 0, 512, 768);
+  bg.addColorStop(0, theme.accent);
+  bg.addColorStop(1, theme.accent2);
+  ctx.fillStyle = bg;
+  ctx.beginPath();
+  ctx.roundRect(0, 0, 512, 768, 48);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(255,255,255,0.85)";
+  ctx.lineWidth = 16;
+  ctx.beginPath();
+  ctx.roundRect(22, 22, 468, 724, 40);
+  ctx.stroke();
+  ctx.fillStyle = "rgba(58, 24, 72, 0.78)";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = "800 54px 'Baloo 2', 'Trebuchet MS', sans-serif";
+  ctx.fillText(title, 256, 300);
+  ctx.font = "800 96px 'Baloo 2', 'Trebuchet MS', sans-serif";
+  ctx.fillText(subtitle, 256, 420);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}

@@ -121,12 +121,6 @@ export function dealState(multiplier: number, values: number[], columns: number)
 }
 
 export function playableCardIds(state: GameState): string[] {
-  const ids: string[] = [];
-  const wasteTop = state.waste[state.waste.length - 1];
-  if (wasteTop && canPlayToFoundation(state, wasteTop)) ids.push(wasteTop.id);
-  state.tableau.forEach((pile) => {
-    const top = pile[pile.length - 1];
-    if (top && canPlayToFoundation(state, top)) ids.push(top.id);
-  });
-  return ids;
+  const need = nextNeeded(state);
+  return [...state.waste, ...state.tableau.flat()].filter((card) => card.value === need).map((card) => card.id);
 }
