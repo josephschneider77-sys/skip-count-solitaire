@@ -452,6 +452,10 @@ export function makeFaceTexture(theme: DeckTheme, value: number, suit: Suit): TH
 
 export function makeBackTexture(theme: DeckTheme): THREE.CanvasTexture {
   return makeTexture((ctx) => {
+    // Face-down is a 180° X flip, so paint the back inverted to read upright in play.
+    ctx.translate(FACE_W / 2, FACE_H / 2);
+    ctx.rotate(Math.PI);
+    ctx.translate(-FACE_W / 2, -FACE_H / 2);
     const bg = ctx.createLinearGradient(0, 0, FACE_W, FACE_H);
     bg.addColorStop(0, "#5b12b8");
     bg.addColorStop(0.35, theme.back);
