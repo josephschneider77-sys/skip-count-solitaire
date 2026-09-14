@@ -19,7 +19,10 @@ import {
   playToFoundation,
   playToTableau,
   highestMultiple,
+  playableFoundationIds,
   playableWasteId,
+  hasTableauDrop,
+  isLegalTableauPiles,
   removeRun,
   runFrom,
 } from "./rules.ts";
@@ -275,5 +278,176 @@ assert.deepEqual(autoHomeAll(cascade), ["cas-2h", "cas-4h"]);
 assert.equal(cascade.waste.length, 0);
 assert.equal(cascade.tableau[0]?.length, 0);
 assert.equal(cascade.foundations[0]?.map((card) => card.value).join(","), "2,4");
+
+const lv4 = dealKlondike(4, rngFrom(44));
+assert.equal(lv4.multiplier, 4);
+assert.equal(lv4.highest, 52);
+const card20 = { id: "lv4-20", value: 20, multiplier: 4, suit: "hearts" as const, faceUp: true };
+const card24 = { id: "lv4-24", value: 24, multiplier: 4, suit: "clubs" as const, faceUp: true };
+const card32 = { id: "lv4-32", value: 32, multiplier: 4, suit: "spades" as const, faceUp: true };
+const card36 = { id: "lv4-36", value: 36, multiplier: 4, suit: "diamonds" as const, faceUp: true };
+assert.equal(canPlaceOnCard(lv4, card20, card24), true, "level 4: 20 stacks on 24");
+assert.equal(canPlaceOnCard(lv4, card32, card20), false, "level 4: 32 must not stack on 20");
+assert.equal(canPlaceOnCard(lv4, card36, card20), false, "level 4: 36 must not stack on 20");
+assert.equal(canPlaceOnCard(lv4, card24, card20), false, "level 4: never build up");
+assert.equal(canPlaceOnCard(lv4, card32, card36), true);
+
+const waste20on24 = dealKlondike(4, rngFrom(45));
+waste20on24.waste = [{ ...card20 }];
+waste20on24.tableau[2] = [{ ...card24 }];
+assert.equal(canStackOnTableau(waste20on24, card20, 2), true);
+assert.equal(playToTableau(waste20on24, "lv4-20", 2), true);
+assert.equal(waste20on24.tableau[2]?.at(-1)?.id, "lv4-20");
+assert.equal(waste20on24.waste.length, 0);
+assert.equal(isLegalTableauPiles(waste20on24), true);
+
+const tab20on24 = dealKlondike(4, rngFrom(46));
+tab20on24.tableau[0] = [{ id: "tab-20h", value: 20, multiplier: 4, suit: "hearts", faceUp: true }];
+tab20on24.tableau[6] = [{ id: "tab-24c", value: 24, multiplier: 4, suit: "clubs", faceUp: true }];
+assert.equal(playToTableau(tab20on24, "tab-20h", 6), true);
+assert.deepEqual(
+  tab20on24.tableau[6]?.map((card) => card.value),
+  [24, 20],
+);
+assert.equal(isLegalTableauPiles(tab20on24), true);
+
+const rejectUp = dealKlondike(4, rngFrom(47));
+rejectUp.tableau[1] = [{ id: "base-20", value: 20, multiplier: 4, suit: "hearts", faceUp: true }];
+rejectUp.waste = [{ id: "up-32", value: 32, multiplier: 4, suit: "clubs", faceUp: true }];
+assert.equal(canStackOnTableau(rejectUp, rejectUp.waste[0]!, 1), false);
+assert.equal(playToTableau(rejectUp, "up-32", 1), false);
+assert.equal(rejectUp.tableau[1]?.at(-1)?.id, "base-20");
+rejectUp.waste = [{ id: "up-36", value: 36, multiplier: 4, suit: "spades", faceUp: true }];
+assert.equal(playToTableau(rejectUp, "up-36", 1), false);
+assert.deepEqual(
+  rejectUp.tableau[1]?.map((card) => card.value),
+  [20],
+);
+
+const midYank = dealKlondike(4, rngFrom(48));
+midYank.foundations = [[], [], [], []];
+midYank.tableau[3] = [
+  { id: "run-36s", value: 36, multiplier: 4, suit: "spades", faceUp: true },
+  { id: "run-32s", value: 32, multiplier: 4, suit: "spades", faceUp: true },
+  { id: "run-28s", value: 28, multiplier: 4, suit: "spades", faceUp: true },
+  { id: "run-24s", value: 24, multiplier: 4, suit: "spades", faceUp: true },
+  { id: "run-20s", value: 20, multiplier: 4, suit: "spades", faceUp: true },
+];
+const midBefore = midYank.tableau[3]!.map((card) => card.id);
+assert.equal(canAutoHome(midYank, "run-28s"), false, "buried mid-run card is not homeable");
+assert.equal(canAutoHome(midYank, "run-24s"), false);
+assert.equal(canAutoHome(midYank, "run-20s"), false);
+assert.equal(playToFoundation(midYank, "run-28s"), false);
+assert.equal(playToFoundation(midYank, "run-24s"), false);
+assert.deepEqual(midYank.tableau[3]?.map((card) => card.id), midBefore);
+assert.equal(runFrom(midYank, "run-28s")?.length, 3);
+assert.equal(removeRun(midYank, "run-32s").length, 4);
+assert.deepEqual(
+  midYank.tableau[3]?.map((card) => card.value),
+  [36],
+  "moving a legal suffix keeps the cards above; never leaves a lone orphan 20",
+);
+
+const orphanGuard = dealKlondike(4, rngFrom(49));
+orphanGuard.tableau[2] = [
+  { id: "gap-36", value: 36, multiplier: 4, suit: "hearts", faceUp: true },
+  { id: "gap-32", value: 32, multiplier: 4, suit: "clubs", faceUp: true },
+  { id: "gap-20", value: 20, multiplier: 4, suit: "spades", faceUp: true },
+];
+assert.equal(isLegalTableauPiles(orphanGuard), false);
+assert.equal(runFrom(orphanGuard, "gap-36"), null);
+assert.equal(runFrom(orphanGuard, "gap-32"), null);
+assert.deepEqual(removeRun(orphanGuard, "gap-32"), []);
+assert.deepEqual(
+  orphanGuard.tableau[2]?.map((card) => card.value),
+  [36, 32, 20],
+  "cannot yank a mid card out of a broken column",
+);
+assert.equal(playToFoundation(orphanGuard, "gap-32"), false);
+assert.equal(canAutoHome(orphanGuard, "gap-20"), false);
+
+const autoTops = dealKlondike(4, rngFrom(50));
+autoTops.foundations = [
+  [
+    { id: "h4", value: 4, multiplier: 4, suit: "hearts", faceUp: true },
+    { id: "h8", value: 8, multiplier: 4, suit: "hearts", faceUp: true },
+    { id: "h12", value: 12, multiplier: 4, suit: "hearts", faceUp: true },
+    { id: "h16", value: 16, multiplier: 4, suit: "hearts", faceUp: true },
+  ],
+  [],
+  [],
+  [],
+];
+const buriedHome = { id: "buried-20h", value: 20, multiplier: 4, suit: "hearts", faceUp: true };
+const wasteTop20 = { id: "waste-20h", value: 20, multiplier: 4, suit: "hearts", faceUp: true };
+autoTops.waste = [buriedHome, wasteTop20];
+autoTops.tableau = autoTops.tableau.map(() => []);
+autoTops.tableau[0] = [
+  { id: "col-24c", value: 24, multiplier: 4, suit: "clubs", faceUp: false },
+  { id: "col-8c", value: 8, multiplier: 4, suit: "clubs", faceUp: true },
+];
+autoTops.stock = [];
+assert.equal(canAutoHome(autoTops, "buried-20h"), false);
+assert.equal(playToFoundation(autoTops, "buried-20h"), false);
+assert.equal(canAutoHome(autoTops, "waste-20h"), true);
+assert.equal(hasTableauDrop(autoTops, "waste-20h"), false);
+assert.ok(playableFoundationIds(autoTops).includes("waste-20h"));
+assert.equal(canAutoHome(autoTops, "col-24c"), false);
+assert.equal(playToFoundation(autoTops, "col-24c"), false);
+assert.equal(autoTops.tableau[0]?.at(-1)?.id, "col-8c");
+assert.deepEqual(autoHomeAll(autoTops), ["waste-20h"]);
+assert.equal(autoTops.waste.at(-1)?.id, "buried-20h");
+assert.equal(autoTops.foundations[0]?.at(-1)?.id, "waste-20h");
+assert.equal(isLegalTableauPiles(autoTops), true);
+
+const keepFor24 = dealKlondike(4, rngFrom(51));
+keepFor24.foundations = [
+  [{ id: "keep-16h", value: 16, multiplier: 4, suit: "hearts", faceUp: true }],
+  [],
+  [],
+  [],
+];
+keepFor24.waste = [{ id: "keep-20h", value: 20, multiplier: 4, suit: "hearts", faceUp: true }];
+keepFor24.tableau = keepFor24.tableau.map(() => []);
+keepFor24.tableau[5] = [{ id: "keep-24c", value: 24, multiplier: 4, suit: "clubs", faceUp: true }];
+keepFor24.stock = [];
+assert.equal(canAutoHome(keepFor24, "keep-20h"), true, "double-tap may still home 20");
+assert.equal(hasTableauDrop(keepFor24, "keep-20h"), true);
+assert.equal(playableFoundationIds(keepFor24, true).includes("keep-20h"), false);
+assert.deepEqual(autoHomeAll(keepFor24, true), []);
+assert.equal(keepFor24.waste.at(-1)?.id, "keep-20h");
+assert.equal(playToTableau(keepFor24, "keep-20h", 5), true);
+assert.deepEqual(
+  keepFor24.tableau[5]?.map((card) => card.value),
+  [24, 20],
+);
+assert.equal(isLegalTableauPiles(keepFor24), true);
+
+const homeAfterRun = dealKlondike(4, rngFrom(52));
+homeAfterRun.foundations = [
+  [],
+  [],
+  [],
+  [
+    { id: "s4", value: 4, multiplier: 4, suit: "spades", faceUp: true },
+    { id: "s8", value: 8, multiplier: 4, suit: "spades", faceUp: true },
+    { id: "s12", value: 12, multiplier: 4, suit: "spades", faceUp: true },
+    { id: "s16", value: 16, multiplier: 4, suit: "spades", faceUp: true },
+  ],
+];
+homeAfterRun.tableau = homeAfterRun.tableau.map(() => []);
+homeAfterRun.waste = [];
+homeAfterRun.stock = [];
+homeAfterRun.tableau[4] = [
+  { id: "seq-36s", value: 36, multiplier: 4, suit: "spades", faceUp: true },
+  { id: "seq-32s", value: 32, multiplier: 4, suit: "spades", faceUp: true },
+  { id: "seq-28s", value: 28, multiplier: 4, suit: "spades", faceUp: true },
+  { id: "seq-24s", value: 24, multiplier: 4, suit: "spades", faceUp: true },
+  { id: "seq-20s", value: 20, multiplier: 4, suit: "spades", faceUp: true },
+];
+assert.equal(isLegalTableauPiles(homeAfterRun), true);
+assert.deepEqual(autoHomeAll(homeAfterRun), ["seq-20s", "seq-24s", "seq-28s", "seq-32s", "seq-36s"]);
+assert.equal(homeAfterRun.tableau[4]?.length, 0);
+assert.equal(isLegalTableauPiles(homeAfterRun), true);
 
 console.log("rules tests passed");

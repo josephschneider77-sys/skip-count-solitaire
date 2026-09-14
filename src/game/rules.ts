@@ -167,16 +167,54 @@ export function canAutoHome(state: GameState, id: string): boolean {
 }
 
 export function playToFoundation(state: GameState, id: string): boolean {
-  if (!canAutoHome(state, id)) return false;
+  if (!canAutoHome(state, id) || !isTopWasteOrTableau(state, id)) return false;
+  const loc = findCard(state, id);
+  if (!loc) return false;
   const moved = removeRun(state, id);
   const card = moved[0];
-  if (!card || moved.length !== 1) return false;
+  if (!card || moved.length !== 1) {
+    if (loc.pile === "waste") state.waste.push(...moved);
+    else if (loc.pile === "tableau" && loc.column !== undefined) state.tableau[loc.column]?.push(...moved);
+    return false;
+  }
   state.foundations[suitIndex(card.suit)]?.push(card);
   return true;
 }
 
+/** Tableau builds down by exactly one skip: dest − moving === multiplier (never up, never a gap). */
 export function canPlaceOnCard(state: GameState, moving: CardModel, dest: CardModel): boolean {
   return dest.value - moving.value === state.multiplier;
+}
+
+/** True when this waste/tableau card starts a run that can legally drop on another column. */
+export function hasTableauDrop(state: GameState, id: string): boolean {
+  const run = runFrom(state, id);
+  if (!run?.[0]) return false;
+  const loc = findCard(state, id);
+  return state.tableau.some((pile, column) => {
+    if (pile.length === 0) return false;
+    if (loc?.pile === "tableau" && loc.column === column) return false;
+    return canStackOnTableau(state, run[0]!, column);
+  });
+}
+
+/** Face-up suffix of every column must be a contiguous descending skip-count (no orphans / gaps). */
+export function isLegalTableauPiles(state: GameState): boolean {
+  return state.tableau.every((pile) => {
+    let seenFaceUp = false;
+    for (let i = 0; i < pile.length; i += 1) {
+      const card = pile[i];
+      if (!card) return false;
+      if (!card.faceUp) {
+        if (seenFaceUp) return false;
+        continue;
+      }
+      seenFaceUp = true;
+      const above = pile[i - 1];
+      if (above?.faceUp && !canPlaceOnCard(state, card, above)) return false;
+    }
+    return true;
+  });
 }
 
 export function canStackOnTableau(state: GameState, moving: CardModel, column: number): boolean {
@@ -221,14 +259,14 @@ export function cloneState(state: GameState): GameState {
 }
 
 /** Send every currently legal waste/tableau top home, repeating as new tops appear. */
-export function autoHomeAll(state: GameState): string[] {
+export function autoHomeAll(state: GameState, preferTableau = false): string[] {
   const moved: string[] = [];
-  let ids = playableFoundationIds(state);
+  let ids = playableFoundationIds(state, preferTableau);
   while (ids[0]) {
     const id = ids[0];
     if (!playToFoundation(state, id)) break;
     moved.push(id);
-    ids = playableFoundationIds(state);
+    ids = playableFoundationIds(state, preferTableau);
   }
   return moved;
 }
@@ -291,7 +329,9 @@ export function removeRun(state: GameState, id: string): CardModel[] {
   if (loc.pile === "tableau" && loc.column !== undefined) {
     const pile = state.tableau[loc.column];
     if (!pile) return [];
-    const run = pile.splice(loc.index);
+    const legal = runFrom(state, id);
+    if (!legal?.length) return [];
+    const run = pile.splice(loc.index, legal.length);
     const exposed = pile[pile.length - 1];
     if (exposed && !exposed.faceUp) exposed.faceUp = true;
     return run;
@@ -318,14 +358,16 @@ export function drawFromStock(state: GameState): "draw" | "recycle" | "empty" {
   return "recycle";
 }
 
-export function playableFoundationIds(state: GameState): string[] {
+export function playableFoundationIds(state: GameState, preferTableau = false): string[] {
   const ids: string[] = [];
-  const wasteTop = state.waste[state.waste.length - 1];
-  if (wasteTop && canPlayToFoundation(state, wasteTop)) ids.push(wasteTop.id);
-  state.tableau.forEach((pile) => {
-    const top = pile[pile.length - 1];
-    if (top && top.faceUp && canPlayToFoundation(state, top)) ids.push(top.id);
-  });
+  const consider = (card: CardModel | undefined): void => {
+    if (!card?.faceUp || !canPlayToFoundation(state, card)) return;
+    if (!isTopWasteOrTableau(state, card.id)) return;
+    if (preferTableau && hasTableauDrop(state, card.id)) return;
+    ids.push(card.id);
+  };
+  consider(state.waste[state.waste.length - 1]);
+  state.tableau.forEach((pile) => consider(pile[pile.length - 1]));
   return ids;
 }
 
