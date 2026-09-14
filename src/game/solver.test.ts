@@ -55,6 +55,17 @@ for (let level = 2; level <= 4; level += 1) {
     dealt.stock.length + dealt.tableau.reduce((sum, col) => sum + col.length, 0),
     52,
   );
+  assert.deepEqual(
+    dealt.tableau.map((col) => col.length),
+    [1, 2, 3, 4, 5, 6, 7],
+  );
+  dealt.tableau.forEach((col) => {
+    const faceUp = col.filter((card) => card.faceUp);
+    assert.equal(faceUp.length, 1, `dealSolvable(${level}) must not pre-build face-up stacks`);
+    col.forEach((card, index) => {
+      assert.equal(card.faceUp, index === col.length - 1);
+    });
+  });
   assert.equal(isWinnable(dealt), true, `dealSolvable(${level}) should be winnable`);
 }
 

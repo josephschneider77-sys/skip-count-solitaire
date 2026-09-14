@@ -3,8 +3,11 @@ export const CARD_H = 2.02;
 export const CARD_D = 0.07;
 /** Almost flat so ranks stay readable; a tiny lift shows a sliver of thickness. */
 export const CARD_LEAN = -Math.PI / 2 + 0.05;
-/** In-plane spin so painted ranks and rainbows read right-side-up for the player. */
-export const CARD_FACE_SPIN = Math.PI;
+/**
+ * In-plane yaw. Must stay 0: camera.up is −Z, so a 180° spin puts ranks
+ * upside-down in the gentle top-down view.
+ */
+export const CARD_FACE_SPIN = 0;
 export const CARD_Y = 0.06;
 
 export type LayoutMetrics = {

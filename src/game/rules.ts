@@ -106,6 +106,19 @@ export function dealKlondike(multiplier: number, rng: () => number = Math.random
   };
 }
 
+/** Classic Klondike deal order: one card across the seven columns, then the next row. */
+export function klondikeDealOrder(tableau: CardModel[][]): CardModel[] {
+  const queue: CardModel[] = [];
+  const rows = Math.max(0, ...tableau.map((pile) => pile.length));
+  for (let row = 0; row < rows; row += 1) {
+    for (const pile of tableau) {
+      const card = pile[row];
+      if (card) queue.push(card);
+    }
+  }
+  return queue;
+}
+
 export function suitIndex(suit: Suit): number {
   return SUITS.indexOf(suit);
 }
