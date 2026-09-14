@@ -1032,7 +1032,7 @@ export class SkipCountGame {
     const home = foundationCount(this.state);
     setText("#hud-level", String(this.state.multiplier));
     setText("#hud-next", String(home));
-    setText("#hud-empty", "Any card");
+    setText("#hud-high", String(this.state.highest));
     const hint = document.querySelector("#hint-line");
     if (hint) {
       hint.textContent = `Draw. Homes ${this.state.lowest}→${this.state.highest} by ${this.state.multiplier}s. Stack down by ${this.state.multiplier}s. Empty spots take any card.`;
