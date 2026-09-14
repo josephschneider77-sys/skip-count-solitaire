@@ -29,6 +29,7 @@ import { themeFor, type DeckTheme } from "./themes";
 import { edgeMaterial, makeBackTexture, makeFaceTexture, makeHaloTexture, makePadTexture, makeTableTexture } from "./textures";
 import {
   CARD_D,
+  CARD_FACE_SPIN,
   CARD_H,
   CARD_LEAN,
   CARD_W,
@@ -40,6 +41,12 @@ import {
   orthoHalfExtents,
   type LayoutMetrics,
 } from "./layout";
+
+function faceTowardPlayer(obj: THREE.Object3D, lean = CARD_LEAN): void {
+  obj.rotation.order = "ZXY";
+  obj.rotation.z = CARD_FACE_SPIN;
+  obj.rotation.x = lean;
+}
 
 type CardView = {
   model: CardModel;
@@ -186,6 +193,8 @@ export class SkipCountGame {
         metalness: 0.22,
       }),
     );
+    table.rotation.order = "ZXY";
+    table.rotation.z = CARD_FACE_SPIN;
     table.rotation.x = -Math.PI / 2;
     table.position.y = -0.04;
     this.scene.add(table);
@@ -199,7 +208,7 @@ export class SkipCountGame {
       opacity: 0.92,
     });
     this.stockPad = new THREE.Mesh(padGeo, padMat);
-    this.stockPad.rotation.x = CARD_LEAN;
+    faceTowardPlayer(this.stockPad);
     this.stockPad.userData.pad = "stock";
     this.scene.add(this.stockPad);
     this.wastePad = new THREE.Mesh(
@@ -211,13 +220,13 @@ export class SkipCountGame {
         roughness: 0.6,
       }),
     );
-    this.wastePad.rotation.x = CARD_LEAN;
+    faceTowardPlayer(this.wastePad);
     this.wastePad.userData.pad = "waste";
     this.scene.add(this.wastePad);
 
     for (let i = 0; i < 4; i += 1) {
       const pad = new THREE.Mesh(padGeo.clone(), padMat.clone());
-      pad.rotation.x = CARD_LEAN;
+      faceTowardPlayer(pad);
       pad.userData.pad = "foundation";
       pad.userData.column = i;
       this.scene.add(pad);
@@ -225,7 +234,7 @@ export class SkipCountGame {
     }
     for (let i = 0; i < 7; i += 1) {
       const pad = new THREE.Mesh(padGeo.clone(), padMat.clone());
-      pad.rotation.x = CARD_LEAN;
+      faceTowardPlayer(pad);
       pad.userData.pad = "tableau";
       pad.userData.column = i;
       pad.material = new THREE.MeshStandardMaterial({
@@ -253,7 +262,7 @@ export class SkipCountGame {
         toneMapped: false,
       }),
     );
-    mesh.rotation.x = CARD_LEAN;
+    faceTowardPlayer(mesh);
     mesh.raycast = () => {};
     mesh.visible = false;
     this.scene.add(mesh);
@@ -407,7 +416,7 @@ export class SkipCountGame {
       const flipper = new THREE.Group();
       flipper.add(mesh);
       const tilt = new THREE.Group();
-      tilt.rotation.x = CARD_LEAN;
+      faceTowardPlayer(tilt);
       tilt.add(flipper);
       const group = new THREE.Group();
       group.add(tilt);
