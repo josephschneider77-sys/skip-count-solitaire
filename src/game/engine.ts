@@ -14,6 +14,7 @@ import {
   foundationCount,
   isDoubleTap,
   isWon,
+  klondikeDealOrder,
   playToFoundation,
   playableFoundationIds,
   playableWasteId,
@@ -124,6 +125,21 @@ export class SkipCountGame {
         __scsTap: (id: string) => this.onCardTapped(id),
         __scsWaste: () => (this.state ? playableWasteId(this.state) : undefined),
         __scsHomeable: () => (this.state ? playableFoundationIds(this.state, true) : []),
+        __scsFlips: () => {
+          if (!this.state) return [];
+          return this.state.tableau.flatMap((pile, column) =>
+            pile.map((card, index) => {
+              const view = this.cards.get(card.id);
+              return {
+                column,
+                index,
+                faceUp: card.faceUp,
+                flip: Number(view?.flipper.rotation.x.toFixed(2)),
+                id: card.id,
+              };
+            }),
+          );
+        },
         __scsDump: () =>
           this.state
             ? {
@@ -444,18 +460,27 @@ export class SkipCountGame {
     });
     this.busy = true;
     let delay = 0;
-    const queue = this.state.tableau.flat();
+    const queue = klondikeDealOrder(this.state.tableau);
+    const finishDeal = (): void => {
+      this.tweens.length = 0;
+      this.snapAllCards();
+      this.busy = false;
+      this.fitCamera();
+      this.refreshPads();
+      this.syncHud();
+      this.syncHighlights();
+    };
     queue.forEach((card, index) => {
       const view = this.cards.get(card.id);
       if (!view) return;
       view.group.position.copy(this.stockOrigin());
       view.flipper.rotation.x = Math.PI;
       this.animateTo(view, this.poseFor(card.id), card.faceUp ? 0 : Math.PI, 0.32, delay, () => {
-        if (index === queue.length - 1) this.flushAutoHomes();
+        if (index === queue.length - 1) finishDeal();
       });
       delay += 0.028;
     });
-    if (queue.length === 0) this.flushAutoHomes();
+    if (queue.length === 0) finishDeal();
   }
 
   private layout(): LayoutMetrics {

@@ -9,6 +9,7 @@ import {
   canStackOnTableau,
   DOUBLE_TAP_MS,
   dealKlondike,
+  klondikeDealOrder,
   deckSize,
   drawFromStock,
   emptyColumnHint,
@@ -74,6 +75,12 @@ dealt.tableau.forEach((col) => {
 });
 assert.equal(dealt.lowest, 7);
 assert.equal(dealt.highest, 91);
+const dealOrder = klondikeDealOrder(dealt.tableau);
+assert.equal(dealOrder.length, 28);
+assert.equal(dealOrder[0]?.id, dealt.tableau[0]?.[0]?.id);
+assert.equal(dealOrder[1]?.id, dealt.tableau[1]?.[0]?.id);
+assert.equal(dealOrder[7]?.id, dealt.tableau[1]?.[1]?.id);
+assert.notEqual(dealOrder[1]?.id, dealt.tableau[0]?.[0]?.id, "deal across columns, not down one stack");
 
 const ace = { id: "a", value: 7, multiplier: 7, suit: SUITS[0], faceUp: true } as const;
 assert.equal(canPlayToFoundation(dealt, { ...ace }), true);
