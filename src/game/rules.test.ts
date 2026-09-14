@@ -324,6 +324,27 @@ assert.deepEqual(
   [20],
 );
 
+const rejectRunOn20 = dealKlondike(4, rngFrom(53));
+rejectRunOn20.tableau = rejectRunOn20.tableau.map(() => []);
+rejectRunOn20.waste = [];
+rejectRunOn20.stock = [];
+rejectRunOn20.tableau[0] = [{ id: "dest-20", value: 20, multiplier: 4, suit: "hearts", faceUp: true }];
+rejectRunOn20.tableau[1] = [
+  { id: "run-36d", value: 36, multiplier: 4, suit: "diamonds", faceUp: true },
+  { id: "run-32d", value: 32, multiplier: 4, suit: "diamonds", faceUp: true },
+];
+assert.equal(canStackOnTableau(rejectRunOn20, rejectRunOn20.tableau[1]![0]!, 0), false);
+assert.equal(playToTableau(rejectRunOn20, "run-36d", 0), false, "36-32 run must not auto-stack onto 20");
+assert.deepEqual(
+  rejectRunOn20.tableau[0]?.map((card) => card.value),
+  [20],
+);
+assert.deepEqual(
+  rejectRunOn20.tableau[1]?.map((card) => card.value),
+  [36, 32],
+);
+assert.equal(isLegalTableauPiles(rejectRunOn20), true);
+
 const midYank = dealKlondike(4, rngFrom(48));
 midYank.foundations = [[], [], [], []];
 midYank.tableau[3] = [

@@ -275,9 +275,21 @@ export function autoHomeAll(state: GameState, preferTableau = false): string[] {
 export function playToTableau(state: GameState, id: string, column: number): boolean {
   const run = runFrom(state, id);
   if (!run?.[0] || !canStackOnTableau(state, run[0], column)) return false;
+  const dest = state.tableau[column];
+  if (!dest) return false;
+  const source = findCard(state, id);
+  const destLen = dest.length;
   const moved = removeRun(state, id);
   if (moved.length === 0) return false;
-  state.tableau[column]?.push(...moved);
+  dest.push(...moved);
+  if (!isLegalTableauPiles(state)) {
+    dest.splice(destLen, moved.length);
+    if (source?.pile === "waste") state.waste.push(...moved);
+    else if (source?.pile === "tableau" && source.column !== undefined) {
+      state.tableau[source.column]?.push(...moved);
+    }
+    return false;
+  }
   return true;
 }
 
