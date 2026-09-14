@@ -105,12 +105,12 @@ body,
   color: #8a2be2;
 }
 
-.empty-chip {
-  background: linear-gradient(180deg, #fff7c8 0%, #ffe36a 100%);
+.high-chip {
+  background: linear-gradient(180deg, #fff7c8 0%, #ffe14a 100%);
   border-color: #fff;
 }
 
-.empty-chip strong {
+.high-chip strong {
   color: #6b1aa8;
 }
 
@@ -369,7 +369,7 @@ h2 {
     font-size: 15px;
   }
 
-  .empty-chip strong {
+  .high-chip strong {
     font-size: 16px;
   }
 

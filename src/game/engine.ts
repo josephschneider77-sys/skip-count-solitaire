@@ -4,6 +4,7 @@ import {
   SUIT_GLYPH,
   SUITS,
   canAutoHome,
+  canPlaceOnCard,
   canPlayToFoundation,
   canStackOnTableau,
   autoHomeAll,
@@ -13,6 +14,7 @@ import {
   foundationCount,
   isDoubleTap,
   isWon,
+  playToFoundation,
   playableFoundationIds,
   playableWasteId,
   removeRun,
@@ -114,7 +116,17 @@ export class SkipCountGame {
       Object.assign(window, {
         __scsTap: (id: string) => this.onCardTapped(id),
         __scsWaste: () => (this.state ? playableWasteId(this.state) : undefined),
-        __scsHomeable: () => (this.state ? playableFoundationIds(this.state) : []),
+        __scsHomeable: () => (this.state ? playableFoundationIds(this.state, true) : []),
+        __scsDump: () =>
+          this.state
+            ? {
+                multiplier: this.state.multiplier,
+                highest: this.state.highest,
+                waste: this.state.waste.map((card) => card.value),
+                tableau: this.state.tableau.map((pile) => pile.map((card) => `${card.faceUp ? "" : "d"}${card.value}`)),
+                homes: this.state.foundations.map((pile) => pile.map((card) => card.value)),
+              }
+            : undefined,
         __scsDebugDouble: (id: string) => {
           if (!this.state) return { error: "no state" };
           const before = {
@@ -323,6 +335,7 @@ export class SkipCountGame {
       const demo = new URLSearchParams(window.location.search);
       if (demo.get("glow") === "1") this.arrangeEmptyWasteDemo();
       if (demo.get("home") === "1") this.arrangeHomeableDemo();
+      if (demo.get("lv4") === "1") this.arrangeLevel4Playtest();
     }
     this.refreshPads();
     this.fitCamera();
@@ -478,7 +491,7 @@ export class SkipCountGame {
     this.foundationPads.forEach((pad, i) => pad.position.copy(this.foundationOrigin(i)));
     this.tableauPads.forEach((pad, i) => pad.position.copy(this.tableauOrigin(i, 0)));
     if (this.wasteHalo) {
-      this.wasteHalo.position.copy(this.wasteOrigin()).setY(CARD_Y + 0.02);
+      this.wasteHalo.position.copy(this.wasteOrigin()).setY(CARD_Y - 0.03);
     }
     this.emptyHalos.forEach((halo, i) => {
       halo.position.copy(this.tableauOrigin(i, 0)).setY(CARD_Y + 0.02);
@@ -528,7 +541,7 @@ export class SkipCountGame {
     if (loc.pile === "waste") {
       const fromEnd = this.state.waste.length - 1 - loc.index;
       const fan = Math.max(0, 2 - fromEnd);
-      return this.wasteOrigin().add(new THREE.Vector3(fan * this.layout().wasteFan, loc.index * 0.01, 0));
+      return this.wasteOrigin().add(new THREE.Vector3(fan * this.layout().wasteFan, 0.06 + loc.index * 0.014, 0));
     }
     if (loc.pile === "foundation" && loc.column !== undefined) {
       return this.foundationOrigin(loc.column).add(new THREE.Vector3(0, loc.index * 0.012, 0));
@@ -700,15 +713,43 @@ export class SkipCountGame {
   private pickPointerObject(hits: THREE.Intersection[]): THREE.Object3D | null {
     if (!this.state || hits.length === 0) return null;
     const nearest = hits[0]?.distance ?? 0;
+    const selected = this.selectedId;
+    const wasteId = playableWasteId(this.state);
+    const wasteCard = wasteId ? runFrom(this.state, wasteId)?.[0] : undefined;
+    const dropping = Boolean(selected);
+    const tableauColumn = (object: THREE.Object3D): number | undefined => {
+      const pad = object.userData.pad as string | undefined;
+      if (pad === "tableau") return object.userData.column as number;
+      const id = object.userData.cardId as string | undefined;
+      const loc = id ? findCard(this.state!, id) : null;
+      return loc?.pile === "tableau" ? loc.column : undefined;
+    };
+    const wasteFits = (column: number | undefined): boolean =>
+      Boolean(wasteCard && column !== undefined && canStackOnTableau(this.state!, wasteCard, column));
     const scored = hits
-      .filter((hit) => hit.distance <= nearest + 0.55)
+      .filter((hit) => {
+        const column = tableauColumn(hit.object);
+        const isTableau = column !== undefined;
+        if (isTableau && (dropping || wasteFits(column))) return hit.distance <= nearest + 2.2;
+        return hit.distance <= nearest + 0.55;
+      })
       .map((hit) => {
         const object = hit.object;
         const pad = object.userData.pad as string | undefined;
         const id = object.userData.cardId as string | undefined;
         const loc = id ? findCard(this.state!, id) : null;
+        const pile = loc?.column !== undefined ? this.state!.tableau[loc.column] : undefined;
+        const isColumnTop = Boolean(pile && loc?.pile === "tableau" && loc.index === pile.length - 1);
+        const column = tableauColumn(object);
         let score = 0;
-        if (loc?.pile === "waste" || pad === "waste") score = 100;
+        if (dropping) {
+          if (loc?.pile === "tableau" || pad === "tableau") score = isColumnTop ? 130 : 110;
+          else if (loc?.pile === "foundation" || pad === "foundation") score = 90;
+          else if (loc?.pile === "waste" || pad === "waste") score = 30;
+          else if (loc?.pile === "stock" || pad === "stock") score = 10;
+        } else if (wasteFits(column) && (loc?.pile === "tableau" || pad === "tableau")) {
+          score = isColumnTop || pad === "tableau" ? 125 : 105;
+        } else if (loc?.pile === "waste" || pad === "waste") score = 100;
         else if (loc?.pile === "tableau") score = 80;
         else if (pad === "tableau") score = 50;
         else if (loc?.pile === "foundation" || pad === "foundation") score = 40;
@@ -789,7 +830,15 @@ export class SkipCountGame {
     this.lastTap = { id, time: now };
 
     if (loc.pile === "tableau" && loc.column !== undefined) {
-      if (this.tryTableauMove(loc.column)) return;
+      if (this.selectedId && this.tryTableauMove(loc.column)) return;
+      const wasteId = playableWasteId(this.state);
+      const waste = wasteId ? runFrom(this.state, wasteId)?.[0] : undefined;
+      const dest = this.state.tableau[loc.column]?.[loc.index];
+      const isTop = loc.index === (this.state.tableau[loc.column]?.length ?? 0) - 1;
+      if (waste && dest && isTop && wasteId && canPlaceOnCard(this.state, waste, dest)) {
+        this.moveRunToTableau(wasteId, loc.column);
+        return;
+      }
     }
 
     const run = runFrom(this.state, id);
@@ -869,10 +918,16 @@ export class SkipCountGame {
 
   private moveToFoundation(id: string, recordUndo = true, animated = 0): void {
     if (!this.state) return;
+    if (!canAutoHome(this.state, id)) {
+      if (!recordUndo) this.flushAutoHomes(animated);
+      else {
+        this.busy = false;
+        this.syncHighlights();
+      }
+      return;
+    }
     if (recordUndo) this.pushUndo();
-    const run = removeRun(this.state, id);
-    const card = run[0];
-    if (!card || run.length !== 1) {
+    if (!playToFoundation(this.state, id)) {
       if (recordUndo) {
         this.undos.pop();
         this.syncUndoButton();
@@ -880,7 +935,13 @@ export class SkipCountGame {
       this.flushAutoHomes(animated);
       return;
     }
-    this.state.foundations[suitIndex(card.suit)]?.push(card);
+    const card = findCard(this.state, id)
+      ? this.state.foundations.flat().find((item) => item.id === id)
+      : undefined;
+    if (!card) {
+      this.flushAutoHomes(animated);
+      return;
+    }
     const view = this.cards.get(card.id);
     if (!view) {
       this.flushAutoHomes(animated + 1);
@@ -930,7 +991,7 @@ export class SkipCountGame {
   /** Auto-send every legal home card; skips Undo so one user action reverts the whole cascade. */
   private flushAutoHomes(animated = 0): void {
     if (!this.state) return;
-    const next = playableFoundationIds(this.state)[0];
+    const next = playableFoundationIds(this.state, true)[0];
     if (!next) {
       this.busy = false;
       this.fitCamera();
@@ -941,7 +1002,7 @@ export class SkipCountGame {
       return;
     }
     if (animated >= 8) {
-      autoHomeAll(this.state);
+      autoHomeAll(this.state, true);
       this.snapAllCards();
       this.busy = false;
       this.fitCamera();
@@ -1032,7 +1093,7 @@ export class SkipCountGame {
     const home = foundationCount(this.state);
     setText("#hud-level", String(this.state.multiplier));
     setText("#hud-next", String(home));
-    setText("#hud-empty", "Any card");
+    setText("#hud-high", String(this.state.highest));
     const hint = document.querySelector("#hint-line");
     if (hint) {
       hint.textContent = `Draw. Homes ${this.state.lowest}→${this.state.highest} by ${this.state.multiplier}s. Stack down by ${this.state.multiplier}s. Empty spots take any card.`;
@@ -1045,22 +1106,30 @@ export class SkipCountGame {
     const selectedRun = this.selectedId ? new Set((runFrom(this.state, this.selectedId) ?? []).map((card) => card.id)) : new Set<string>();
     const emptyHint = emptyColumnHint(this.state);
     const boost = performance.now() < this.hintUntil;
+    const wasteTopId = this.state.waste[this.state.waste.length - 1]?.id;
     this.cards.forEach((view, id) => {
       const mats = view.mesh.material as THREE.MeshStandardMaterial[];
       const face = mats[4];
       if (!face) return;
       const selected = selectedRun.has(id);
-      const wasteEmptyHint = emptyHint?.wasteId === id;
       const ready = playable.has(id);
+      const wasteTop = wasteTopId === id;
+      face.transparent = false;
+      face.opacity = 1;
+      face.color.set("#ffffff");
+      if (wasteTop) {
+        face.metalness = 0.04;
+        face.roughness = 0.3;
+        view.mesh.renderOrder = 4;
+      } else {
+        view.mesh.renderOrder = 0;
+      }
       if (selected) {
         face.emissive = new THREE.Color(this.theme.glow);
-        face.emissiveIntensity = 0.7;
-      } else if (wasteEmptyHint) {
-        face.emissive = new THREE.Color(this.theme.glow);
-        face.emissiveIntensity = 0.72;
+        face.emissiveIntensity = 0.35;
       } else if (ready) {
         face.emissive = new THREE.Color(this.theme.accent2);
-        face.emissiveIntensity = boost ? 0.85 : 0.42;
+        face.emissiveIntensity = boost ? 0.45 : 0.18;
       } else {
         face.emissive = new THREE.Color("#000000");
         face.emissiveIntensity = 0;
@@ -1086,7 +1155,7 @@ export class SkipCountGame {
       }
       this.setHalo(this.emptyHalos[index] ?? null, hinted.has(index), pulse);
     });
-    this.setHalo(this.wasteHalo, columns.length > 0 && Boolean(this.state && emptyColumnHint(this.state)), pulse);
+    this.setHalo(this.wasteHalo, false, pulse);
   }
 
   private setHalo(mesh: THREE.Mesh | null, on: boolean, pulse: number): void {
@@ -1158,17 +1227,33 @@ export class SkipCountGame {
     }
   }
 
+  /** DEV: plant the level-4 20→24 play and a face-up skip-count run for mid-yank checks. */
+  private arrangeLevel4Playtest(): void {
+    if (!this.state || this.state.multiplier !== 4) return;
+    const take = (value: number, suit: CardModel["suit"]): CardModel | undefined => {
+      const card = this.pullCard((item) => item.value === value && item.suit === suit);
+      if (card) card.faceUp = true;
+      return card;
+    };
+    const sixteen = take(16, "hearts");
+    const twenty = take(20, "hearts");
+    const twentyFourA = take(24, "clubs");
+    const twentyFourB = take(24, "diamonds");
+    const run = [36, 32, 28, 24, 20]
+      .map((value) => take(value, "spades"))
+      .filter((card): card is CardModel => Boolean(card));
+    if (sixteen) this.state.foundations[suitIndex("hearts")] = [sixteen];
+    this.state.waste = twenty ? [twenty] : this.state.waste;
+    if (twentyFourA) this.state.tableau[1] = [twentyFourA];
+    if (twentyFourB) this.state.tableau[5] = [twentyFourB];
+    if (run.length === 5) this.state.tableau[3] = run;
+  }
+
   private pulseEmptyKingHint(): void {
     if (!this.state) return;
     const hint = emptyColumnHint(this.state);
     if (!hint) return;
     const pulse = 0.5 + Math.sin(performance.now() / 260) * 0.5;
-    const view = this.cards.get(hint.wasteId);
-    const face = view ? (view.mesh.material as THREE.MeshStandardMaterial[])[4] : undefined;
-    if (face && this.selectedId !== hint.wasteId) {
-      face.emissive = new THREE.Color(this.theme.glow);
-      face.emissiveIntensity = 0.55 + pulse * 0.4;
-    }
     this.glowEmptyPads(hint.columns, pulse);
   }
 
