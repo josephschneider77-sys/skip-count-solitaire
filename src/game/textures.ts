@@ -468,35 +468,20 @@ export function makeBackTexture(theme: DeckTheme): THREE.CanvasTexture {
 
     rainbowRibbon(ctx, 28, 24, FACE_W - 56, 18);
     rainbowRibbon(ctx, 28, FACE_H - 42, FACE_W - 56, 18);
-    glitter(ctx, FACE_W, FACE_H, 120);
-    drawRainbow(ctx, FACE_W * 0.5, FACE_H * 0.3, 220);
-    drawRainbow(ctx, FACE_W * 0.5, FACE_H * 0.78, 200);
+    glitter(ctx, FACE_W, FACE_H, 90);
+    drawRainbow(ctx, FACE_W * 0.5, FACE_H * 0.42, 340);
 
-    const kittens: Array<[number, number, number, boolean]> = [
-      [118, 168, 78, true],
-      [392, 176, 72, true],
-      [256, 210, 92, true],
-      [96, 340, 70, true],
-      [416, 348, 74, true],
-      [190, 400, 64, false],
-      [330, 408, 64, false],
-      [128, 560, 76, true],
-      [384, 552, 80, true],
-      [256, 600, 70, true],
-    ];
-    kittens.forEach(([x, y, size, bowed], i) => {
-      drawRainbowKitty(ctx, x, y, size, RAINBOW[i % RAINBOW.length], bowed);
-    });
+    drawRainbowKitty(ctx, 108, 168, 70, RAINBOW[5], true);
+    drawRainbowKitty(ctx, 404, 176, 66, RAINBOW[2], true);
+    drawRainbowKitty(ctx, FACE_W * 0.5, FACE_H * 0.52, 210, RAINBOW[6], true);
+    drawRainbowKitty(ctx, 120, 600, 72, RAINBOW[3], true);
+    drawRainbowKitty(ctx, 392, 592, 74, RAINBOW[4], true);
 
-    ctx.fillStyle = "rgba(42, 16, 72, 0.42)";
-    roundRect(ctx, 86, 300, FACE_W - 172, 150, 28);
-    ctx.fill();
     ctx.fillStyle = "#fff7ff";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.font = "900 48px 'Baloo 2', 'Trebuchet MS', sans-serif";
-    ctx.fillText("SKIP", FACE_W / 2, FACE_H / 2 - 18);
-    ctx.fillText("COUNT", FACE_W / 2, FACE_H / 2 + 28);
+    ctx.font = "900 28px 'Baloo 2', 'Trebuchet MS', sans-serif";
+    ctx.fillText("SKIP COUNT", FACE_W / 2, FACE_H - 78);
 
     ctx.strokeStyle = "#ffe14a";
     ctx.lineWidth = 10;
