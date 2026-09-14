@@ -20,15 +20,15 @@ export type LayoutMetrics = {
 
 export function layoutForAspect(aspect: number): LayoutMetrics {
   if (aspect < 0.68) {
-    return { colGap: 1.16, cascade: 0.52, topZ: -2.35, tableauZ0: 0.15, wasteFan: 0.1 };
+    return { colGap: 1.16, cascade: 0.7, topZ: -2.35, tableauZ0: 0.15, wasteFan: 0.1 };
   }
   if (aspect < 0.9) {
-    return { colGap: 1.32, cascade: 0.55, topZ: -2.5, tableauZ0: 0.18, wasteFan: 0.14 };
+    return { colGap: 1.32, cascade: 0.74, topZ: -2.5, tableauZ0: 0.18, wasteFan: 0.14 };
   }
   if (aspect < 1.15) {
-    return { colGap: 1.48, cascade: 0.58, topZ: -2.65, tableauZ0: 0.22, wasteFan: 0.16 };
+    return { colGap: 1.48, cascade: 0.78, topZ: -2.65, tableauZ0: 0.22, wasteFan: 0.16 };
   }
-  return { colGap: 1.56, cascade: 0.6, topZ: -2.75, tableauZ0: 0.25, wasteFan: 0.18 };
+  return { colGap: 1.56, cascade: 0.82, topZ: -2.75, tableauZ0: 0.25, wasteFan: 0.18 };
 }
 
 export function columnX(column: number, colGap: number): number {

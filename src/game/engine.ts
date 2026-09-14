@@ -125,6 +125,21 @@ export class SkipCountGame {
         __scsTap: (id: string) => this.onCardTapped(id),
         __scsWaste: () => (this.state ? playableWasteId(this.state) : undefined),
         __scsHomeable: () => (this.state ? playableFoundationIds(this.state, true) : []),
+        __scsFlips: () => {
+          if (!this.state) return [];
+          return this.state.tableau.flatMap((pile, column) =>
+            pile.map((card, index) => {
+              const view = this.cards.get(card.id);
+              return {
+                column,
+                index,
+                faceUp: card.faceUp,
+                flip: Number(view?.flipper.rotation.x.toFixed(2)),
+                id: card.id,
+              };
+            }),
+          );
+        },
         __scsDump: () =>
           this.state
             ? {
@@ -447,6 +462,8 @@ export class SkipCountGame {
     let delay = 0;
     const queue = klondikeDealOrder(this.state.tableau);
     const finishDeal = (): void => {
+      this.tweens.length = 0;
+      this.snapAllCards();
       this.busy = false;
       this.fitCamera();
       this.refreshPads();
