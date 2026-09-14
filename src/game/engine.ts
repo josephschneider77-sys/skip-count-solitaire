@@ -478,7 +478,7 @@ export class SkipCountGame {
     this.foundationPads.forEach((pad, i) => pad.position.copy(this.foundationOrigin(i)));
     this.tableauPads.forEach((pad, i) => pad.position.copy(this.tableauOrigin(i, 0)));
     if (this.wasteHalo) {
-      this.wasteHalo.position.copy(this.wasteOrigin()).setY(CARD_Y + 0.02);
+      this.wasteHalo.position.copy(this.wasteOrigin()).setY(CARD_Y - 0.03);
     }
     this.emptyHalos.forEach((halo, i) => {
       halo.position.copy(this.tableauOrigin(i, 0)).setY(CARD_Y + 0.02);
@@ -528,7 +528,7 @@ export class SkipCountGame {
     if (loc.pile === "waste") {
       const fromEnd = this.state.waste.length - 1 - loc.index;
       const fan = Math.max(0, 2 - fromEnd);
-      return this.wasteOrigin().add(new THREE.Vector3(fan * this.layout().wasteFan, loc.index * 0.01, 0));
+      return this.wasteOrigin().add(new THREE.Vector3(fan * this.layout().wasteFan, 0.06 + loc.index * 0.014, 0));
     }
     if (loc.pile === "foundation" && loc.column !== undefined) {
       return this.foundationOrigin(loc.column).add(new THREE.Vector3(0, loc.index * 0.012, 0));
@@ -1045,22 +1045,30 @@ export class SkipCountGame {
     const selectedRun = this.selectedId ? new Set((runFrom(this.state, this.selectedId) ?? []).map((card) => card.id)) : new Set<string>();
     const emptyHint = emptyColumnHint(this.state);
     const boost = performance.now() < this.hintUntil;
+    const wasteTopId = this.state.waste[this.state.waste.length - 1]?.id;
     this.cards.forEach((view, id) => {
       const mats = view.mesh.material as THREE.MeshStandardMaterial[];
       const face = mats[4];
       if (!face) return;
       const selected = selectedRun.has(id);
-      const wasteEmptyHint = emptyHint?.wasteId === id;
       const ready = playable.has(id);
+      const wasteTop = wasteTopId === id;
+      face.transparent = false;
+      face.opacity = 1;
+      face.color.set("#ffffff");
+      if (wasteTop) {
+        face.metalness = 0.04;
+        face.roughness = 0.3;
+        view.mesh.renderOrder = 4;
+      } else {
+        view.mesh.renderOrder = 0;
+      }
       if (selected) {
         face.emissive = new THREE.Color(this.theme.glow);
-        face.emissiveIntensity = 0.7;
-      } else if (wasteEmptyHint) {
-        face.emissive = new THREE.Color(this.theme.glow);
-        face.emissiveIntensity = 0.72;
+        face.emissiveIntensity = 0.35;
       } else if (ready) {
         face.emissive = new THREE.Color(this.theme.accent2);
-        face.emissiveIntensity = boost ? 0.85 : 0.42;
+        face.emissiveIntensity = boost ? 0.45 : 0.18;
       } else {
         face.emissive = new THREE.Color("#000000");
         face.emissiveIntensity = 0;
@@ -1086,7 +1094,7 @@ export class SkipCountGame {
       }
       this.setHalo(this.emptyHalos[index] ?? null, hinted.has(index), pulse);
     });
-    this.setHalo(this.wasteHalo, columns.length > 0 && Boolean(this.state && emptyColumnHint(this.state)), pulse);
+    this.setHalo(this.wasteHalo, false, pulse);
   }
 
   private setHalo(mesh: THREE.Mesh | null, on: boolean, pulse: number): void {
@@ -1163,12 +1171,6 @@ export class SkipCountGame {
     const hint = emptyColumnHint(this.state);
     if (!hint) return;
     const pulse = 0.5 + Math.sin(performance.now() / 260) * 0.5;
-    const view = this.cards.get(hint.wasteId);
-    const face = view ? (view.mesh.material as THREE.MeshStandardMaterial[])[4] : undefined;
-    if (face && this.selectedId !== hint.wasteId) {
-      face.emissive = new THREE.Color(this.theme.glow);
-      face.emissiveIntensity = 0.55 + pulse * 0.4;
-    }
     this.glowEmptyPads(hint.columns, pulse);
   }
 
