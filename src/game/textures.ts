@@ -133,9 +133,7 @@ function drawRainbowKitty(
     RAINBOW.forEach((stripe, i) => {
       ctx.strokeStyle = stripe;
       ctx.lineWidth = size * 0.055;
-      ctx.beginPath();
-      ctx.arc(0, size * 0.02, size * 0.42 - i * size * 0.055, Math.PI, 0);
-      ctx.stroke();
+      strokeUprightRainbow(ctx, 0, size * 0.02, size * 0.42 - i * size * 0.055);
     });
     ctx.restore();
   }
@@ -213,15 +211,28 @@ function drawUnicorn(ctx: CanvasRenderingContext2D, x: number, y: number, size: 
   ctx.restore();
 }
 
+/**
+ * Canvas `arc` is clockwise by default. π→0 clockwise is a U (frown).
+ * Counterclockwise π→0 is the hill so rainbows sit upright with the ranks.
+ */
+function strokeUprightRainbow(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  radius: number,
+): void {
+  ctx.beginPath();
+  ctx.arc(x, y, radius, Math.PI, 0, true);
+  ctx.stroke();
+}
+
 function drawRainbow(ctx: CanvasRenderingContext2D, x: number, y: number, size: number): void {
   ctx.save();
   ctx.translate(x, y);
   RAINBOW.forEach((color, i) => {
     ctx.strokeStyle = color;
     ctx.lineWidth = size * 0.075;
-    ctx.beginPath();
-    ctx.arc(0, size * 0.18, size * 0.46 - i * size * 0.075, Math.PI, 0);
-    ctx.stroke();
+    strokeUprightRainbow(ctx, 0, size * 0.18, size * 0.46 - i * size * 0.075);
   });
   ctx.restore();
 }
@@ -450,8 +461,20 @@ export function makeFaceTexture(theme: DeckTheme, value: number, suit: Suit): TH
   });
 }
 
+/**
+ * Face-down is a 180° X flip. BoxGeometry's back UVs then put canvas-top
+ * at the screen-bottom in the current top-down view. Paint the back inverted
+ * so kittens, rainbows, and "SKIP COUNT" stay upright with the face ranks.
+ */
+function beginFaceDownBack(ctx: CanvasRenderingContext2D): void {
+  ctx.translate(FACE_W / 2, FACE_H / 2);
+  ctx.rotate(Math.PI);
+  ctx.translate(-FACE_W / 2, -FACE_H / 2);
+}
+
 export function makeBackTexture(theme: DeckTheme): THREE.CanvasTexture {
   return makeTexture((ctx) => {
+    beginFaceDownBack(ctx);
     const bg = ctx.createLinearGradient(0, 0, FACE_W, FACE_H);
     bg.addColorStop(0, "#5b12b8");
     bg.addColorStop(0.35, theme.back);
