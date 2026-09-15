@@ -212,8 +212,8 @@ function drawUnicorn(ctx: CanvasRenderingContext2D, x: number, y: number, size: 
 }
 
 /**
- * Canvas `arc` is clockwise by default. π→0 clockwise is a U (frown).
- * Counterclockwise π→0 is the hill so rainbows sit upright with the ranks.
+ * Canvas angles: 0 is right, π/2 is down. Clockwise π→0 goes through the
+ * top of the canvas (12 o'clock) — an n-shaped hill, not a U.
  */
 function strokeUprightRainbow(
   ctx: CanvasRenderingContext2D,
@@ -222,7 +222,7 @@ function strokeUprightRainbow(
   radius: number,
 ): void {
   ctx.beginPath();
-  ctx.arc(x, y, radius, Math.PI, 0, true);
+  ctx.arc(x, y, radius, Math.PI, 0, false);
   ctx.stroke();
 }
 
@@ -428,7 +428,8 @@ export function makeFaceTexture(theme: DeckTheme, value: number, suit: Suit): TH
     glitter(ctx, FACE_W, FACE_H, 70);
     ctx.save();
     ctx.globalAlpha = 0.28;
-    drawRainbow(ctx, FACE_W * 0.5, FACE_H * 0.7, 210);
+    // Sit the hill under the top rank — a bow at y=0.7H reads as a frown.
+    drawRainbow(ctx, FACE_W * 0.5, FACE_H * 0.34, 210);
     ctx.restore();
 
     const iconSpots: Array<[number, number, number]> = [
