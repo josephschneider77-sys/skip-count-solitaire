@@ -3,6 +3,7 @@ import {
   SUITS,
   buildDeck,
   autoHomeAll,
+  autoHomeableIds,
   canAutoHome,
   canPlaceOnCard,
   canPlayToFoundation,
@@ -20,6 +21,7 @@ import {
   playToFoundation,
   playToTableau,
   highestMultiple,
+  isFoundationStarter,
   playableFoundationIds,
   playableWasteId,
   hasTableauDrop,
@@ -281,9 +283,15 @@ const cascade = dealKlondike(2, rngFrom(33));
 cascade.foundations = [[], [], [], []];
 cascade.waste = [{ id: "cas-2h", value: 2, multiplier: 2, suit: "hearts", faceUp: true }];
 cascade.tableau[0] = [{ id: "cas-4h", value: 4, multiplier: 2, suit: "hearts", faceUp: true }];
-assert.deepEqual(autoHomeAll(cascade), ["cas-2h", "cas-4h"]);
+assert.equal(isFoundationStarter(cascade, cascade.waste[0]!), true);
+assert.equal(isFoundationStarter(cascade, cascade.tableau[0]![0]!), false);
+assert.deepEqual(autoHomeableIds(cascade), ["cas-2h"]);
+assert.deepEqual(autoHomeAll(cascade), ["cas-2h"], "Lv2: only 2s auto-home; 4 must stay");
 assert.equal(cascade.waste.length, 0);
-assert.equal(cascade.tableau[0]?.length, 0);
+assert.equal(cascade.tableau[0]?.at(-1)?.id, "cas-4h");
+assert.equal(cascade.foundations[0]?.map((card) => card.value).join(","), "2");
+assert.equal(canAutoHome(cascade, "cas-4h"), true, "4 is still legal to send home by hand");
+assert.equal(playToFoundation(cascade, "cas-4h"), true);
 assert.equal(cascade.foundations[0]?.map((card) => card.value).join(","), "2,4");
 
 const lv4 = dealKlondike(4, rngFrom(44));
@@ -420,10 +428,12 @@ assert.equal(playToFoundation(autoTops, "buried-20h"), false);
 assert.equal(canAutoHome(autoTops, "waste-20h"), true);
 assert.equal(hasTableauDrop(autoTops, "waste-20h"), false);
 assert.ok(playableFoundationIds(autoTops).includes("waste-20h"));
+assert.equal(autoHomeableIds(autoTops).includes("waste-20h"), false, "20 is not a Lv4 starter");
 assert.equal(canAutoHome(autoTops, "col-24c"), false);
 assert.equal(playToFoundation(autoTops, "col-24c"), false);
 assert.equal(autoTops.tableau[0]?.at(-1)?.id, "col-8c");
-assert.deepEqual(autoHomeAll(autoTops), ["waste-20h"]);
+assert.deepEqual(autoHomeAll(autoTops), [], "higher multiples never auto-home");
+assert.equal(playToFoundation(autoTops, "waste-20h"), true, "double-tap still homes 20");
 assert.equal(autoTops.waste.at(-1)?.id, "buried-20h");
 assert.equal(autoTops.foundations[0]?.at(-1)?.id, "waste-20h");
 assert.equal(isLegalTableauPiles(autoTops), true);
@@ -474,8 +484,42 @@ homeAfterRun.tableau[4] = [
   { id: "seq-20s", value: 20, multiplier: 4, suit: "spades", faceUp: true },
 ];
 assert.equal(isLegalTableauPiles(homeAfterRun), true);
-assert.deepEqual(autoHomeAll(homeAfterRun), ["seq-20s", "seq-24s", "seq-28s", "seq-32s", "seq-36s"]);
-assert.equal(homeAfterRun.tableau[4]?.length, 0);
+assert.deepEqual(autoHomeAll(homeAfterRun), [], "run tops above N do not auto-stack onto foundations");
+assert.equal(homeAfterRun.tableau[4]?.at(-1)?.id, "seq-20s");
+assert.equal(playToFoundation(homeAfterRun, "seq-20s"), true);
+assert.equal(homeAfterRun.foundations[3]?.at(-1)?.id, "seq-20s");
+assert.deepEqual(autoHomeAll(homeAfterRun), [], "still no cascade after a manual home");
+assert.equal(homeAfterRun.tableau[4]?.at(-1)?.id, "seq-24s");
 assert.equal(isLegalTableauPiles(homeAfterRun), true);
+
+const lv2Starters = dealKlondike(2, rngFrom(60));
+lv2Starters.foundations = [[], [], [], []];
+lv2Starters.waste = [{ id: "start-2d", value: 2, multiplier: 2, suit: "diamonds", faceUp: true }];
+lv2Starters.tableau[0] = [{ id: "start-2c", value: 2, multiplier: 2, suit: "clubs", faceUp: true }];
+lv2Starters.tableau[1] = [{ id: "start-4h", value: 4, multiplier: 2, suit: "hearts", faceUp: true }];
+lv2Starters.tableau[2] = [{ id: "start-2s", value: 2, multiplier: 2, suit: "spades", faceUp: true }];
+assert.deepEqual(autoHomeAll(lv2Starters).sort(), ["start-2c", "start-2d", "start-2s"]);
+assert.equal(lv2Starters.tableau[1]?.at(-1)?.id, "start-4h");
+assert.equal(canAutoHome(lv2Starters, "start-4h"), false, "4 cannot home until its 2 is down");
+
+const lv4Starters = dealKlondike(4, rngFrom(61));
+lv4Starters.foundations = [[], [], [], []];
+lv4Starters.waste = [{ id: "lv4-4h", value: 4, multiplier: 4, suit: "hearts", faceUp: true }];
+lv4Starters.tableau[0] = [{ id: "lv4-8h", value: 8, multiplier: 4, suit: "hearts", faceUp: true }];
+lv4Starters.tableau[1] = [{ id: "lv4-4s", value: 4, multiplier: 4, suit: "spades", faceUp: true }];
+assert.deepEqual(autoHomeAll(lv4Starters).sort(), ["lv4-4h", "lv4-4s"]);
+assert.equal(lv4Starters.tableau[0]?.at(-1)?.id, "lv4-8h");
+assert.equal(canAutoHome(lv4Starters, "lv4-8h"), true);
+assert.deepEqual(autoHomeAll(lv4Starters), [], "Lv4: 8 does not auto-home after 4");
+assert.equal(playToFoundation(lv4Starters, "lv4-8h"), true);
+
+const keepStarter = dealKlondike(2, rngFrom(62));
+keepStarter.foundations = [[], [], [], []];
+keepStarter.waste = [{ id: "keep-2h", value: 2, multiplier: 2, suit: "hearts", faceUp: true }];
+keepStarter.tableau = keepStarter.tableau.map(() => []);
+keepStarter.tableau[5] = [{ id: "keep-4c", value: 4, multiplier: 2, suit: "clubs", faceUp: true }];
+assert.equal(hasTableauDrop(keepStarter, "keep-2h"), true);
+assert.deepEqual(autoHomeAll(keepStarter, true), [], "preferTableau still leaves a useful starter on the table");
+assert.deepEqual(autoHomeAll(keepStarter), ["keep-2h"]);
 
 console.log("rules tests passed");

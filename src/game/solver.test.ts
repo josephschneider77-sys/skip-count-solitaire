@@ -46,7 +46,7 @@ stacked.tableau = [
   [],
   [],
 ];
-assert.equal(isWinnable(stacked), true, "face-up skip-count columns should auto-home to a win");
+assert.equal(isWinnable(stacked), true, "face-up skip-count columns should still be winnable by sending cards home");
 
 for (let level = 2; level <= 4; level += 1) {
   const dealt = dealSolvable(level, rngFrom(8));

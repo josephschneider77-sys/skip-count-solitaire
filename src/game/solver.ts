@@ -6,7 +6,9 @@ import {
   drawFromStock,
   findCard,
   isWon,
+  playToFoundation,
   playToTableau,
+  playableFoundationIds,
   playableWasteId,
   runFrom,
   type GameState,
@@ -16,8 +18,9 @@ import {
 export const DEAL_TRIES = 40;
 
 /**
- * Node cap for the browser solver. These ease-ups (any-on-empty + auto-home)
- * make most deals winnable; a timeout is usually search limits, not a brick.
+ * Node cap for the browser solver. Any-on-empty plus player-legal homes
+ * (starters auto-home; higher ranks can be sent home by hand) make most deals
+ * winnable; a timeout is usually search limits, not a brick.
  */
 export const SOLVER_STEP_LIMIT = 3500;
 
@@ -102,10 +105,20 @@ function applyMove(state: GameState, move: SearchMove): boolean {
   return playToTableau(state, move.id, move.column);
 }
 
+/** Player can still send any legal card home (double-tap / drag). Starters also auto-home. */
+function sendLegalHomes(state: GameState): void {
+  autoHomeAll(state);
+  let ids = playableFoundationIds(state);
+  while (ids[0]) {
+    if (!playToFoundation(state, ids[0])) break;
+    ids = playableFoundationIds(state);
+  }
+}
+
 function playGreedy(state: GameState): boolean {
   const seen = new Set<string>();
   for (let i = 0; i < 400; i += 1) {
-    autoHomeAll(state);
+    sendLegalHomes(state);
     if (isWon(state)) return true;
     const key = stateKey(state);
     if (seen.has(key)) break;
@@ -130,7 +143,7 @@ export function isWinnable(start: GameState, stepLimit = SOLVER_STEP_LIMIT): boo
   if (playGreedy(cloneState(start))) return true;
 
   const root = cloneState(start);
-  autoHomeAll(root);
+  sendLegalHomes(root);
   if (isWon(root)) return true;
 
   const visited = new Set<string>([stateKey(root)]);
@@ -149,7 +162,7 @@ export function isWinnable(start: GameState, stepLimit = SOLVER_STEP_LIMIT): boo
       if (steps > stepLimit) return false;
       const next = cloneState(current);
       if (!applyMove(next, move)) continue;
-      autoHomeAll(next);
+      sendLegalHomes(next);
       if (isWon(next)) return true;
       const key = stateKey(next);
       if (visited.has(key)) continue;
