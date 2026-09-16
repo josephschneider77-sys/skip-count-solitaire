@@ -151,6 +151,11 @@ export function canPlayToFoundation(state: GameState, card: CardModel): boolean 
   return Boolean(top && top.suit === card.suit && card.value - top.value === state.multiplier);
 }
 
+/** Level starter N — the only rank that auto-homes (never 2N, 3N, …). */
+export function isFoundationStarter(state: GameState, card: Pick<CardModel, "value">): boolean {
+  return card.value === state.lowest;
+}
+
 /** Kid-friendly double-tap window (touch + mouse). */
 export const DOUBLE_TAP_MS = 360;
 
@@ -271,15 +276,15 @@ export function cloneState(state: GameState): GameState {
   };
 }
 
-/** Send every currently legal waste/tableau top home, repeating as new tops appear. */
+/** Auto-send foundation starters (value N) only. Never cascades the next multiples. */
 export function autoHomeAll(state: GameState, preferTableau = false): string[] {
   const moved: string[] = [];
-  let ids = playableFoundationIds(state, preferTableau);
+  let ids = autoHomeableIds(state, preferTableau);
   while (ids[0]) {
     const id = ids[0];
     if (!playToFoundation(state, id)) break;
     moved.push(id);
-    ids = playableFoundationIds(state, preferTableau);
+    ids = autoHomeableIds(state, preferTableau);
   }
   return moved;
 }
@@ -394,6 +399,21 @@ export function playableFoundationIds(state: GameState, preferTableau = false): 
   consider(state.waste[state.waste.length - 1]);
   state.tableau.forEach((pile) => consider(pile[pile.length - 1]));
   return ids;
+}
+
+/** Legal home cards that may auto-fly: starters only (value === N). */
+export function autoHomeableIds(state: GameState, preferTableau = false): string[] {
+  return playableFoundationIds(state, preferTableau).filter((id) => {
+    const loc = findCard(state, id);
+    if (!loc) return false;
+    const card =
+      loc.pile === "waste"
+        ? state.waste[loc.index]
+        : loc.pile === "tableau" && loc.column !== undefined
+          ? state.tableau[loc.column]?.[loc.index]
+          : undefined;
+    return Boolean(card && isFoundationStarter(state, card));
+  });
 }
 
 export function foundationCount(state: GameState): number {

@@ -8,6 +8,7 @@ import {
   canPlayToFoundation,
   canStackOnTableau,
   autoHomeAll,
+  autoHomeableIds,
   drawFromStock,
   emptyColumnHint,
   findCard,
@@ -464,11 +465,10 @@ export class SkipCountGame {
     const finishDeal = (): void => {
       this.tweens.length = 0;
       this.snapAllCards();
-      this.busy = false;
-      this.fitCamera();
       this.refreshPads();
       this.syncHud();
-      this.syncHighlights();
+      // Post-deal only: starters (value N) may fly home. Never mid-deal, never 2N+.
+      this.flushAutoHomes();
     };
     queue.forEach((card, index) => {
       const view = this.cards.get(card.id);
@@ -1022,10 +1022,10 @@ export class SkipCountGame {
     if (run.length === 0) this.flushAutoHomes();
   }
 
-  /** Auto-send every legal home card; skips Undo so one user action reverts the whole cascade. */
+  /** Auto-send foundation starters (value N) only; skips Undo so one action reverts them. */
   private flushAutoHomes(animated = 0): void {
     if (!this.state) return;
-    const next = playableFoundationIds(this.state, true)[0];
+    const next = autoHomeableIds(this.state, true)[0];
     if (!next) {
       this.busy = false;
       this.fitCamera();

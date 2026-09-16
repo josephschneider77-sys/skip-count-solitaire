@@ -17,7 +17,7 @@ Classic **52-card** decks (13 ranks × 4 suits), but ranks are skip-count multip
 
 Classic 7-column Klondike plus a draw pile and waste.
 
-1. Build each suit’s **home** by skip-counting (same suit, up by N). Homes start with N itself.
+1. Build each suit’s **home** by skip-counting (same suit, up by N). Homes start with N itself. Only those starters auto-home; later multiples you move yourself.
 2. On the tableau, stack the **next-smaller** multiple (skip-count down by N). Suit and color do not matter.
 3. Empty columns want the **biggest** multiple (the “king”).
 4. Tap the deck to draw and flip. Face-down cards flip when uncovered.
