@@ -125,7 +125,7 @@ export class SkipCountGame {
       Object.assign(window, {
         __scsTap: (id: string) => this.onCardTapped(id),
         __scsWaste: () => (this.state ? playableWasteId(this.state) : undefined),
-        __scsHomeable: () => (this.state ? playableFoundationIds(this.state, true) : []),
+        __scsHomeable: () => (this.state ? autoHomeableIds(this.state) : []),
         __scsFlips: () => {
           if (!this.state) return [];
           return this.state.tableau.flatMap((pile, column) =>
@@ -361,6 +361,7 @@ export class SkipCountGame {
       const demo = new URLSearchParams(window.location.search);
       if (demo.get("glow") === "1") this.arrangeEmptyWasteDemo();
       if (demo.get("home") === "1") this.arrangeHomeableDemo();
+      if (demo.get("starters") === "1") this.arrangeStarterOnlyDemo();
       if (demo.get("lv4") === "1") this.arrangeLevel4Playtest();
     }
     this.refreshPads();
@@ -1022,10 +1023,10 @@ export class SkipCountGame {
     if (run.length === 0) this.flushAutoHomes();
   }
 
-  /** Auto-send foundation starters (value N) only; skips Undo so one action reverts them. */
+  /** Auto-send foundation starters (value N) only. Always home legal Ns; never 2N+. */
   private flushAutoHomes(animated = 0): void {
     if (!this.state) return;
-    const next = autoHomeableIds(this.state, true)[0];
+    const next = autoHomeableIds(this.state)[0];
     if (!next) {
       this.busy = false;
       this.fitCamera();
@@ -1036,7 +1037,7 @@ export class SkipCountGame {
       return;
     }
     if (animated >= 8) {
-      autoHomeAll(this.state, true);
+      autoHomeAll(this.state);
       this.snapAllCards();
       this.busy = false;
       this.fitCamera();
@@ -1258,6 +1259,25 @@ export class SkipCountGame {
     if (second) {
       second.faceUp = true;
       this.state.tableau[1]?.push(second);
+    }
+  }
+
+  /** DEV: plant starter N on waste and 2N of the same suit on tableau. */
+  private arrangeStarterOnlyDemo(): void {
+    if (!this.state) return;
+    const lowest = this.state.lowest;
+    const next = lowest + this.state.multiplier;
+    const starter = this.pullCard((card) => card.value === lowest);
+    const follow = starter
+      ? this.pullCard((card) => card.value === next && card.suit === starter.suit)
+      : undefined;
+    if (starter) {
+      starter.faceUp = true;
+      this.state.waste.push(starter);
+    }
+    if (follow) {
+      follow.faceUp = true;
+      this.state.tableau[2]?.push(follow);
     }
   }
 
