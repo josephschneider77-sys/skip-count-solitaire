@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { Sfx } from "./audio";
+import { ConfettiParty } from "./confetti";
 import {
   SUIT_GLYPH,
   SUITS,
@@ -14,8 +15,10 @@ import {
   findCard,
   foundationCount,
   isDoubleTap,
+  isFinaleReady,
   isWon,
   klondikeDealOrder,
+  multiplesUpTo,
   playToFoundation,
   playableFoundationIds,
   playableWasteId,
@@ -108,12 +111,18 @@ export class SkipCountGame {
   private hintUntil = 0;
   private undos: GameSnap[] = [];
   private lastTap: { id: string; time: number } | null = null;
+  private party: ConfettiParty | null = null;
+  private celebrating = false;
+  private finaleActive = false;
+  private finaleTimer = 0;
+  private finaleLaunched = 0;
 
   mount(): void {
     this.setupRenderer();
     this.setupLights();
     this.setupTable();
     this.setupParticles();
+    this.setupParty();
     this.bindUi();
     this.fitCamera();
     window.addEventListener("resize", () => this.resize());
@@ -122,6 +131,12 @@ export class SkipCountGame {
     this.resize();
     this.renderer.setAnimationLoop(() => this.tick());
     if (import.meta.env.DEV) {
+      const jump = new URLSearchParams(window.location.search);
+      const level = Number(jump.get("level") ?? "2");
+      const pick = Number.isFinite(level) && level >= 2 && level <= 10 ? level : 2;
+      if (jump.get("finale") === "1" || jump.get("won") === "1") {
+        void this.startLevel(pick);
+      }
       Object.assign(window, {
         __scsTap: (id: string) => this.onCardTapped(id),
         __scsWaste: () => (this.state ? playableWasteId(this.state) : undefined),
@@ -151,6 +166,8 @@ export class SkipCountGame {
                 homes: this.state.foundations.map((pile) => pile.map((card) => card.value)),
               }
             : undefined,
+        __scsFinaleReady: () => (this.state ? isFinaleReady(this.state) : false),
+        __scsCelebrate: () => this.beginCelebration(),
         __scsDebugDouble: (id: string) => {
           if (!this.state) return { error: "no state" };
           const before = {
@@ -303,6 +320,11 @@ export class SkipCountGame {
     this.scene.add(this.particles);
   }
 
+  private setupParty(): void {
+    const canvas = document.querySelector<HTMLCanvasElement>("#confetti-layer");
+    this.party = canvas ? new ConfettiParty(canvas) : null;
+  }
+
   private bindUi(): void {
     const picks = document.querySelector("#level-picks");
     if (picks) {
@@ -331,9 +353,11 @@ export class SkipCountGame {
       this.startLevel(current >= 10 ? 2 : current + 1);
     });
     document.querySelector("#btn-win-menu")?.addEventListener("click", () => this.showTitle());
+    document.querySelector("#win-screen")?.addEventListener("pointerdown", () => this.dismissParty());
   }
 
   private showTitle(): void {
+    this.resetFinale();
     this.clearCards();
     this.state = null;
     this.undos = [];
@@ -343,14 +367,17 @@ export class SkipCountGame {
     setHidden("#win-screen", true);
     setHidden("#hud", true);
     setHidden("#hint-line", true);
+    document.querySelector("#win-screen")?.classList.remove("party-open");
   }
 
   private async startLevel(multiplier: number): Promise<void> {
     this.sfx.select();
+    this.resetFinale();
     setHidden("#title-screen", true);
     setHidden("#win-screen", true);
     setHidden("#hud", false);
     setHidden("#hint-line", false);
+    document.querySelector("#win-screen")?.classList.remove("party-open");
     this.theme = themeFor(multiplier);
     this.selectedId = null;
     this.undos = [];
@@ -363,6 +390,8 @@ export class SkipCountGame {
       if (demo.get("home") === "1") this.arrangeHomeableDemo();
       if (demo.get("starters") === "1") this.arrangeStarterOnlyDemo();
       if (demo.get("lv4") === "1") this.arrangeLevel4Playtest();
+      if (demo.get("finale") === "1") this.arrangeFinaleDemo();
+      if (demo.get("won") === "1") this.arrangeWonDemo();
     }
     this.refreshPads();
     this.fitCamera();
@@ -730,6 +759,7 @@ export class SkipCountGame {
     duration: number,
     delay: number,
     onDone?: () => void,
+    hop = 0.35,
   ): void {
     this.tweens.push({
       group: view.group,
@@ -737,7 +767,7 @@ export class SkipCountGame {
       to: to.clone(),
       fromFlip: view.flipper.rotation.x,
       toFlip,
-      hop: 0.35,
+      hop,
       delay,
       duration,
       elapsed: 0,
@@ -1026,6 +1056,7 @@ export class SkipCountGame {
   /** Auto-send foundation starters (value N) only. Always home legal Ns; never 2N+. */
   private flushAutoHomes(animated = 0): void {
     if (!this.state) return;
+    if (this.finaleActive || this.celebrating) return;
     const next = autoHomeableIds(this.state)[0];
     if (!next) {
       this.busy = false;
@@ -1033,7 +1064,7 @@ export class SkipCountGame {
       this.refreshPads();
       this.syncHud();
       this.syncHighlights();
-      this.checkWin();
+      this.maybeBeginFinale();
       return;
     }
     if (animated >= 8) {
@@ -1044,10 +1075,128 @@ export class SkipCountGame {
       this.refreshPads();
       this.syncHud();
       this.syncHighlights();
-      this.checkWin();
+      this.maybeBeginFinale();
       return;
     }
     this.moveToFoundation(next, false, animated);
+  }
+
+  private maybeBeginFinale(): void {
+    if (!this.state || this.celebrating || this.finaleActive) return;
+    if (isWon(this.state)) {
+      this.beginCelebration();
+      return;
+    }
+    if (isFinaleReady(this.state)) this.beginFinaleStack();
+  }
+
+  /** Win-only: fly every remaining legal card home. Never used mid-game. */
+  private beginFinaleStack(): void {
+    if (!this.state || this.finaleActive) return;
+    this.finaleActive = true;
+    this.finaleLaunched = 0;
+    this.busy = true;
+    this.selectedId = null;
+    this.syncHighlights();
+    this.launchFinaleCard();
+  }
+
+  private launchFinaleCard(): void {
+    if (!this.state || this.celebrating) return;
+    const next = playableFoundationIds(this.state)[0];
+    if (!next) {
+      if (isWon(this.state)) this.beginCelebration();
+      else {
+        this.finaleActive = false;
+        this.busy = false;
+      }
+      return;
+    }
+    if (!playToFoundation(this.state, next)) {
+      if (isWon(this.state)) this.beginCelebration();
+      else {
+        this.finaleActive = false;
+        this.busy = false;
+      }
+      return;
+    }
+    const view = this.cards.get(next);
+    const more = playableFoundationIds(this.state).length > 0;
+    this.finaleLaunched += 1;
+    if (view) {
+      if (this.finaleLaunched === 1 || this.finaleLaunched % 2 === 0) this.sfx.place();
+      this.animateTo(
+        view,
+        this.poseFor(next),
+        0,
+        0.38,
+        0,
+        more ? undefined : () => this.beginCelebration(),
+        0.72,
+      );
+    } else if (!more) {
+      this.beginCelebration();
+      return;
+    }
+    this.refreshPads();
+    this.syncHud();
+    if (this.finaleLaunched >= 2 || !more) this.ensureParty();
+    if (more) {
+      this.finaleTimer = window.setTimeout(() => this.launchFinaleCard(), 100);
+    }
+  }
+
+  private ensureParty(): void {
+    if (!this.state || this.party?.active) return;
+    this.party?.start(this.state.multiplier);
+  }
+
+  private dismissParty(): void {
+    this.party?.stop();
+  }
+
+  private resetFinale(): void {
+    if (this.finaleTimer) {
+      window.clearTimeout(this.finaleTimer);
+      this.finaleTimer = 0;
+    }
+    this.finaleActive = false;
+    this.finaleLaunched = 0;
+    this.celebrating = false;
+    this.party?.stop(true);
+    document.querySelector("#win-screen")?.classList.remove("party-open");
+  }
+
+  private beginCelebration(): void {
+    if (!this.state || this.celebrating) return;
+    this.celebrating = true;
+    this.finaleActive = false;
+    this.busy = false;
+    this.selectedId = null;
+    if (this.finaleTimer) {
+      window.clearTimeout(this.finaleTimer);
+      this.finaleTimer = 0;
+    }
+    this.fitCamera();
+    this.refreshPads();
+    this.syncHud();
+    this.syncHighlights();
+    this.sfx.win();
+    this.ensureParty();
+    const last = this.state.multiplier >= 10;
+    const winTitle = document.querySelector("#win-title");
+    const winBlurb = document.querySelector("#win-blurb");
+    const nextBtn = document.querySelector("#btn-next");
+    if (winTitle) winTitle.textContent = last ? "Rainbow champion!" : "Klondike clear!";
+    if (winBlurb) {
+      winBlurb.textContent = last
+        ? "You skip-counted every suited deck from 2's through 10's!"
+        : `Every ${this.theme.label} home pile is complete.`;
+    }
+    if (nextBtn) nextBtn.textContent = last ? "Play again" : "Next level";
+    const win = document.querySelector("#win-screen");
+    win?.classList.add("party-open");
+    setHidden("#win-screen", false);
   }
 
   private relayoutExposed(): void {
@@ -1068,23 +1217,6 @@ export class SkipCountGame {
     this.sfx.select();
   }
 
-  private checkWin(): void {
-    if (!this.state || !isWon(this.state)) return;
-    this.sfx.win();
-    const last = this.state.multiplier >= 10;
-    const winTitle = document.querySelector("#win-title");
-    const winBlurb = document.querySelector("#win-blurb");
-    const nextBtn = document.querySelector("#btn-next");
-    if (winTitle) winTitle.textContent = last ? "Rainbow champion!" : "Klondike clear!";
-    if (winBlurb) {
-      winBlurb.textContent = last
-        ? "You skip-counted every suited deck from 2's through 10's!"
-        : `Every ${this.theme.label} home pile is complete.`;
-    }
-    if (nextBtn) nextBtn.textContent = last ? "Play again" : "Next level";
-    setHidden("#win-screen", false);
-  }
-
   private pushUndo(): void {
     if (!this.state) return;
     this.undos.push(snapshotState(this.state));
@@ -1093,8 +1225,10 @@ export class SkipCountGame {
 
   private undoLast(): void {
     if (!this.state || this.undos.length === 0) return;
+    if (this.finaleActive && !this.celebrating) return;
     const snap = this.undos.pop();
     if (!snap) return;
+    this.resetFinale();
     this.tweens.length = 0;
     this.busy = false;
     this.selectedId = null;
@@ -1281,6 +1415,61 @@ export class SkipCountGame {
     }
   }
 
+  private gatherCards(): CardModel[] {
+    return this.state ? this.allCards(this.state) : [];
+  }
+
+  private emptyBoard(): void {
+    if (!this.state) return;
+    this.state.stock = [];
+    this.state.waste = [];
+    this.state.foundations = Array.from({ length: 4 }, () => []);
+    this.state.tableau = Array.from({ length: 7 }, () => []);
+  }
+
+  /** DEV: almost-won board so remaining cards can cascade home. */
+  private arrangeFinaleDemo(): void {
+    if (!this.state) return;
+    const cards = this.gatherCards();
+    this.emptyBoard();
+    const ranks = multiplesUpTo(this.state.multiplier);
+    const leftover = ranks.slice(-4);
+    const homeRanks = ranks.slice(0, -4);
+    SUITS.forEach((suit, column) => {
+      homeRanks.forEach((value) => {
+        const card = cards.find((item) => item.suit === suit && item.value === value);
+        if (!card) return;
+        card.faceUp = true;
+        this.state!.foundations[column]?.push(card);
+      });
+      leftover
+        .slice()
+        .reverse()
+        .forEach((value) => {
+          const card = cards.find((item) => item.suit === suit && item.value === value);
+          if (!card) return;
+          card.faceUp = true;
+          this.state!.tableau[column]?.push(card);
+        });
+    });
+  }
+
+  /** DEV: every card already home — confetti + win UI only. */
+  private arrangeWonDemo(): void {
+    if (!this.state) return;
+    const cards = this.gatherCards();
+    this.emptyBoard();
+    const ranks = multiplesUpTo(this.state.multiplier);
+    SUITS.forEach((suit, column) => {
+      ranks.forEach((value) => {
+        const card = cards.find((item) => item.suit === suit && item.value === value);
+        if (!card) return;
+        card.faceUp = true;
+        this.state!.foundations[column]?.push(card);
+      });
+    });
+  }
+
   /** DEV: plant the level-4 20→24 play and a face-up skip-count run for mid-yank checks. */
   private arrangeLevel4Playtest(): void {
     if (!this.state || this.state.multiplier !== 4) return;
@@ -1317,6 +1506,7 @@ export class SkipCountGame {
     this.renderer.setSize(width, height, false);
     this.snapLayout();
     this.fitCamera();
+    this.party?.resize();
   }
 
   private tick(): void {

@@ -289,6 +289,34 @@ export function autoHomeAll(state: GameState, preferTableau = false): string[] {
   return moved;
 }
 
+/**
+ * Cascade every legal home play (any rank). Win/finale only — not mid-game auto-home.
+ * Exposed face-down cards flip via removeRun, then become eligible if they match a home.
+ */
+export function autoCompleteAll(state: GameState): string[] {
+  const moved: string[] = [];
+  let ids = playableFoundationIds(state);
+  while (ids[0]) {
+    const id = ids[0];
+    if (!playToFoundation(state, id)) break;
+    moved.push(id);
+    ids = playableFoundationIds(state);
+  }
+  return moved;
+}
+
+/**
+ * Kid-done check: foundations can take everything still out without tableau
+ * rearranges or stock draws (classic auto-complete). Starters-only auto-home
+ * stays separate — this is the win trigger, not a mid-game helper.
+ */
+export function isFinaleReady(state: GameState): boolean {
+  if (isWon(state)) return true;
+  const clone = cloneState(state);
+  autoCompleteAll(clone);
+  return isWon(clone);
+}
+
 /** Move a waste or tableau run onto a column. Returns false if the play is illegal. */
 export function playToTableau(state: GameState, id: string, column: number): boolean {
   const run = runFrom(state, id);

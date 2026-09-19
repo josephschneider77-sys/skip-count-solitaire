@@ -1,4 +1,4 @@
-import { multiplesUpTo } from "./rules";
+import { multiplesUpTo } from "./rules.ts";
 
 export type IconKind =
   | "heart"
@@ -157,6 +157,74 @@ export const DECK_THEMES: Record<number, DeckTheme> = {
 
 export function themeFor(multiplier: number): DeckTheme {
   return DECK_THEMES[multiplier] ?? DECK_THEMES[2];
+}
+
+export type ConfettiTheme = {
+  multiplier: number;
+  colors: string[];
+  icons: IconKind[];
+  density: number;
+};
+
+const CONFETTI_THEMES: Record<number, ConfettiTheme> = {
+  2: {
+    multiplier: 2,
+    colors: ["#c77dff", "#ff4ad8", "#e56bff", "#ffe14a", "#fff4ff", "#8a2be2"],
+    icons: ["heart", "sparkle"],
+    density: 88,
+  },
+  3: {
+    multiplier: 3,
+    colors: ["#ffe14a", "#ffbf1a", "#ff4ad8", "#fff8e8", "#ffd24a", "#c26b00"],
+    icons: ["star", "sparkle"],
+    density: 96,
+  },
+  4: {
+    multiplier: 4,
+    colors: ["#7a5cff", "#c77dff", "#3dff8a", "#f7f0ff", "#c086ff", "#5b12b8"],
+    icons: ["butterfly", "sparkle"],
+    density: 104,
+  },
+  5: {
+    multiplier: 5,
+    colors: ["#ff7a1a", "#ff6b3d", "#ffe14a", "#fff3ec", "#ff8a5a", "#c43a00"],
+    icons: ["flower", "sparkle"],
+    density: 112,
+  },
+  6: {
+    multiplier: 6,
+    colors: ["#3dff8a", "#12d4c8", "#3ad4ff", "#ecfffb", "#4ae8c8", "#087a6a"],
+    icons: ["dolphin", "sparkle"],
+    density: 120,
+  },
+  7: {
+    multiplier: 7,
+    colors: ["#e56bff", "#ff4ad8", "#c86bff", "#fbf4ff", "#ffe14a", "#8a2be2"],
+    icons: ["unicorn", "heart"],
+    density: 128,
+  },
+  8: {
+    multiplier: 8,
+    colors: ["#3ad4ff", "#2ea7ff", "#3dff8a", "#eef8ff", "#4db6ff", "#0a4f9c"],
+    icons: ["dolphin", "star"],
+    density: 136,
+  },
+  9: {
+    multiplier: 9,
+    colors: ["#ff4ad8", "#ff7eb6", "#c77dff", "#fff0f7", "#ffe14a", "#8a1490"],
+    icons: ["kitty", "heart"],
+    density: 148,
+  },
+  10: {
+    multiplier: 10,
+    colors: ["#ff2d6a", "#ff7a1a", "#ffe14a", "#3dff8a", "#3ad4ff", "#8a2be2", "#ff4ad8"],
+    icons: ["rainbow", "star", "heart", "sparkle"],
+    density: 168,
+  },
+};
+
+export function confettiThemeFor(multiplier: number): ConfettiTheme {
+  return CONFETTI_THEMES[multiplier] ?? CONFETTI_THEMES[2]!;
 }
 
 /** Every level is 13 skip-count ranks × 4 suits (52 cards). */
