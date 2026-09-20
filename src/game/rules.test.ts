@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {
   SUITS,
   buildDeck,
+  autoCompleteAll,
   autoHomeAll,
   autoHomeableIds,
   canAutoHome,
@@ -16,6 +17,7 @@ import {
   emptyColumnHint,
   emptyTableauColumns,
   isDoubleTap,
+  isFinaleReady,
   isWon,
   multiplesUpTo,
   playToFoundation,
@@ -521,5 +523,89 @@ keepStarter.tableau[5] = [{ id: "keep-4c", value: 4, multiplier: 2, suit: "clubs
 assert.equal(hasTableauDrop(keepStarter, "keep-2h"), true);
 assert.deepEqual(autoHomeAll(keepStarter, true), [], "preferTableau still leaves a useful starter on the table");
 assert.deepEqual(autoHomeAll(keepStarter), ["keep-2h"]);
+
+function plantNearWin(multiplier: number, leftoverRanks = 3): ReturnType<typeof dealKlondike> {
+  const state = dealKlondike(multiplier, rngFrom(90 + multiplier));
+  const cards = [...state.stock, ...state.waste, ...state.foundations.flat(), ...state.tableau.flat()];
+  state.stock = [];
+  state.waste = [];
+  state.foundations = [[], [], [], []];
+  state.tableau = [[], [], [], [], [], [], []];
+  const ranks = multiplesUpTo(multiplier);
+  const leftover = ranks.slice(-leftoverRanks);
+  const homeRanks = ranks.slice(0, -leftoverRanks);
+  SUITS.forEach((suit, column) => {
+    homeRanks.forEach((value) => {
+      const card = cards.find((item) => item.suit === suit && item.value === value);
+      if (!card) return;
+      card.faceUp = true;
+      state.foundations[column]?.push(card);
+    });
+    leftover
+      .slice()
+      .reverse()
+      .forEach((value) => {
+        const card = cards.find((item) => item.suit === suit && item.value === value);
+        if (!card) return;
+        card.faceUp = true;
+        state.tableau[column]?.push(card);
+      });
+  });
+  return state;
+}
+
+const midGame = dealKlondike(2, rngFrom(70));
+midGame.foundations = [[], [], [], []];
+midGame.waste = [{ id: "mid-2h", value: 2, multiplier: 2, suit: "hearts", faceUp: true }];
+midGame.tableau[0] = [{ id: "mid-4h", value: 4, multiplier: 2, suit: "hearts", faceUp: true }];
+assert.equal(isFinaleReady(midGame), false, "one homeable 4 does not mean the whole board can finish");
+assert.deepEqual(autoHomeAll(midGame), ["mid-2h"]);
+assert.equal(midGame.tableau[0]?.at(-1)?.id, "mid-4h", "mid-game auto-home still stops at starters");
+assert.equal(isFinaleReady(midGame), false);
+
+const blockedStock = plantNearWin(2, 3);
+const buriedDraw = blockedStock.tableau[0]?.pop();
+if (buriedDraw) {
+  buriedDraw.faceUp = false;
+  blockedStock.stock.push(buriedDraw);
+}
+assert.equal(isFinaleReady(blockedStock), false, "cards still in stock are not auto-complete");
+
+const finaleLv2 = plantNearWin(2, 3);
+assert.equal(isFinaleReady(finaleLv2), true);
+assert.deepEqual(autoHomeAll(finaleLv2), [], "win leftover ranks must not auto-home during play");
+assert.equal(finaleLv2.tableau.some((pile) => pile.length > 0), true);
+const flown = autoCompleteAll(finaleLv2);
+assert.equal(flown.length, 12);
+assert.equal(isWon(finaleLv2), true);
+assert.equal(finaleLv2.tableau.every((pile) => pile.length === 0), true);
+
+const finaleLv4 = plantNearWin(4, 4);
+assert.equal(isFinaleReady(finaleLv4), true);
+assert.deepEqual(autoHomeAll(finaleLv4), []);
+assert.equal(autoCompleteAll(finaleLv4).length, 16);
+assert.equal(isWon(finaleLv4), true);
+
+const finaleLv9 = plantNearWin(9, 2);
+assert.equal(isFinaleReady(finaleLv9), true);
+assert.deepEqual(autoHomeAll(finaleLv9), []);
+assert.equal(isWon(finaleLv9), false);
+autoCompleteAll(finaleLv9);
+assert.equal(isWon(finaleLv9), true);
+
+const alreadyWon = plantNearWin(5, 1);
+autoCompleteAll(alreadyWon);
+assert.equal(isWon(alreadyWon), true);
+assert.equal(isFinaleReady(alreadyWon), true);
+assert.deepEqual(autoCompleteAll(alreadyWon), []);
+
+const buriedReady = plantNearWin(3, 2);
+const top = buriedReady.tableau[0]?.at(-1);
+const under = buriedReady.tableau[0]?.[0];
+if (under) under.faceUp = false;
+assert.equal(top?.faceUp, true);
+assert.equal(isFinaleReady(buriedReady), true, "homing the top card may flip the rest home");
+autoCompleteAll(buriedReady);
+assert.equal(isWon(buriedReady), true);
 
 console.log("rules tests passed");

@@ -254,7 +254,7 @@ function drawSparkle(ctx: CanvasRenderingContext2D, x: number, y: number, size: 
   ctx.restore();
 }
 
-function drawIcon(ctx: CanvasRenderingContext2D, kind: IconKind, x: number, y: number, size: number, color: string): void {
+export function drawIcon(ctx: CanvasRenderingContext2D, kind: IconKind, x: number, y: number, size: number, color: string): void {
   switch (kind) {
     case "heart":
       drawHeart(ctx, x, y, size, color);

@@ -1,4 +1,5 @@
 import {
+  autoCompleteAll,
   autoHomeAll,
   canStackOnTableau,
   cloneState,
@@ -6,9 +7,7 @@ import {
   drawFromStock,
   findCard,
   isWon,
-  playToFoundation,
   playToTableau,
-  playableFoundationIds,
   playableWasteId,
   runFrom,
   type GameState,
@@ -108,11 +107,7 @@ function applyMove(state: GameState, move: SearchMove): boolean {
 /** Player can still send any legal card home (double-tap / drag). Starters also auto-home. */
 function sendLegalHomes(state: GameState): void {
   autoHomeAll(state);
-  let ids = playableFoundationIds(state);
-  while (ids[0]) {
-    if (!playToFoundation(state, ids[0])) break;
-    ids = playableFoundationIds(state);
-  }
+  autoCompleteAll(state);
 }
 
 function playGreedy(state: GameState): boolean {
