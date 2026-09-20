@@ -45,12 +45,20 @@ body,
   inset: 0;
   width: 100%;
   height: 100%;
-  z-index: 6;
+  z-index: 8;
   display: block;
+}
+
+#confetti-layer.is-on {
+  display: block !important;
 }
 
 #confetti-layer[hidden] {
   display: none !important;
+}
+
+#confetti-layer.is-on[hidden] {
+  display: block !important;
 }
 
 #sparkle-layer {

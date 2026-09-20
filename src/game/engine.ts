@@ -1146,8 +1146,9 @@ export class SkipCountGame {
     }
   }
 
-  private ensureParty(): void {
-    if (!this.state || this.party?.active) return;
+  private ensureParty(fresh = false): void {
+    if (!this.state) return;
+    if (!fresh && this.party?.active) return;
     this.party?.start(this.state.multiplier);
   }
 
@@ -1182,7 +1183,7 @@ export class SkipCountGame {
     this.syncHud();
     this.syncHighlights();
     this.sfx.win();
-    this.ensureParty();
+    this.ensureParty(true);
     const last = this.state.multiplier >= 10;
     const winTitle = document.querySelector("#win-title");
     const winBlurb = document.querySelector("#win-blurb");

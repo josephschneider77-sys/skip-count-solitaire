@@ -17,8 +17,8 @@ type Piece = {
   wobble: number;
 };
 
-const FADE_MS = 700;
-const PARTY_MS = 4800;
+const FADE_MS = 800;
+const PARTY_MS = 8200;
 
 export class ConfettiParty {
   private readonly canvas: HTMLCanvasElement;
@@ -52,10 +52,10 @@ export class ConfettiParty {
     this.fade = 1;
     this.startedAt = performance.now();
     this.lastT = this.startedAt;
-    this.fit();
-    this.pieces = this.spawn(this.theme.density);
     this.canvas.hidden = false;
     this.canvas.classList.add("is-on");
+    this.fit();
+    this.pieces = this.spawn(this.theme.density);
     this.raf = requestAnimationFrame((time) => this.tick(time));
     this.stopTimer = window.setTimeout(() => this.stop(), PARTY_MS);
   }
@@ -84,7 +84,10 @@ export class ConfettiParty {
     if (this.raf) cancelAnimationFrame(this.raf);
     this.raf = 0;
     const ctx = this.ctx;
-    if (ctx) ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    if (ctx) {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    }
     this.canvas.hidden = true;
     this.canvas.classList.remove("is-on");
     const done = this.onDone;
@@ -92,9 +95,14 @@ export class ConfettiParty {
     done?.();
   }
 
+  private viewSize(): { width: number; height: number } {
+    const width = Math.max(this.canvas.clientWidth, window.innerWidth || 1, 1);
+    const height = Math.max(this.canvas.clientHeight, window.innerHeight || 1, 1);
+    return { width, height };
+  }
+
   private fit(): void {
-    const width = this.canvas.clientWidth || window.innerWidth || 1;
-    const height = this.canvas.clientHeight || window.innerHeight || 1;
+    const { width, height } = this.viewSize();
     const ratio = Math.min(window.devicePixelRatio || 1, 2);
     this.canvas.width = Math.floor(width * ratio);
     this.canvas.height = Math.floor(height * ratio);
@@ -102,24 +110,24 @@ export class ConfettiParty {
   }
 
   private spawn(count: number): Piece[] {
-    const width = this.canvas.clientWidth || window.innerWidth || 1;
-    const height = this.canvas.clientHeight || window.innerHeight || 1;
+    const { width, height } = this.viewSize();
     const colors = this.theme.colors;
     const icons = this.theme.icons;
     const pieces: Piece[] = [];
     for (let i = 0; i < count; i += 1) {
       const color = colors[i % colors.length] ?? "#ffe14a";
       const icon = icons[i % icons.length] ?? "sparkle";
-      const roll = i % 7;
-      const kind: PieceKind = roll === 0 || roll === 3 ? "icon" : roll === 1 ? "dot" : "candy";
+      const roll = i % 5;
+      const kind: PieceKind = roll <= 1 ? "icon" : roll === 2 ? "dot" : "candy";
+      const onScreen = i % 3 !== 0;
       pieces.push({
         x: Math.random() * width,
-        y: -20 - Math.random() * height * 0.55,
-        vx: (Math.random() - 0.5) * 70,
-        vy: 90 + Math.random() * 140,
+        y: onScreen ? Math.random() * height * 0.55 : -30 - Math.random() * height * 0.4,
+        vx: (Math.random() - 0.5) * 90,
+        vy: 70 + Math.random() * 120,
         rot: Math.random() * Math.PI * 2,
-        vr: (Math.random() - 0.5) * 4,
-        size: kind === "icon" ? 18 + Math.random() * 16 : 8 + Math.random() * 10,
+        vr: (Math.random() - 0.5) * 3.4,
+        size: kind === "icon" ? 34 + Math.random() * 28 : 12 + Math.random() * 14,
         color,
         kind,
         icon,
@@ -132,8 +140,7 @@ export class ConfettiParty {
   private tick(now: number): void {
     if (!this.running) return;
     const ctx = this.ctx;
-    const width = this.canvas.clientWidth || window.innerWidth || 1;
-    const height = this.canvas.clientHeight || window.innerHeight || 1;
+    const { width, height } = this.viewSize();
     const dt = Math.min(0.05, (now - this.lastT) / 1000);
     this.lastT = now;
     if (this.fading) {
@@ -149,16 +156,16 @@ export class ConfettiParty {
       ctx.globalAlpha = this.fade;
     }
 
-    const recycle = !this.fading && now - this.startedAt < PARTY_MS - 900;
+    const recycle = !this.fading && now - this.startedAt < PARTY_MS - 1100;
     this.pieces.forEach((piece) => {
-      piece.vy += 38 * dt;
-      piece.x += piece.vx * dt + Math.sin(now / 280 + piece.wobble) * 18 * dt;
+      piece.vy += 42 * dt;
+      piece.x += piece.vx * dt + Math.sin(now / 260 + piece.wobble) * 22 * dt;
       piece.y += piece.vy * dt;
       piece.rot += piece.vr * dt;
-      if (recycle && piece.y > height + 28) {
-        piece.y = -24 - Math.random() * 80;
+      if (recycle && piece.y > height + 36) {
+        piece.y = -28 - Math.random() * 90;
         piece.x = Math.random() * width;
-        piece.vy = 80 + Math.random() * 90;
+        piece.vy = 70 + Math.random() * 100;
       }
       if (ctx) this.paint(ctx, piece);
     });
@@ -171,22 +178,27 @@ export class ConfettiParty {
     ctx.save();
     ctx.translate(piece.x, piece.y);
     ctx.rotate(piece.rot);
+    ctx.shadowColor = "rgba(255, 255, 255, 0.95)";
+    ctx.shadowBlur = 10;
     if (piece.kind === "icon") {
       drawIcon(ctx, piece.icon, 0, 0, piece.size, piece.color);
     } else if (piece.kind === "dot") {
       ctx.fillStyle = piece.color;
       ctx.beginPath();
-      ctx.arc(0, 0, piece.size * 0.35, 0, Math.PI * 2);
+      ctx.arc(0, 0, piece.size * 0.42, 0, Math.PI * 2);
       ctx.fill();
+      ctx.strokeStyle = "rgba(255,255,255,0.9)";
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
     } else {
-      const w = piece.size;
-      const h = piece.size * 0.42;
+      const w = piece.size * 1.15;
+      const h = piece.size * 0.48;
       ctx.fillStyle = piece.color;
-      ctx.strokeStyle = "rgba(255,255,255,0.85)";
-      ctx.lineWidth = 1.4;
+      ctx.strokeStyle = "rgba(255,255,255,0.92)";
+      ctx.lineWidth = 1.8;
       ctx.beginPath();
       if (typeof ctx.roundRect === "function") {
-        ctx.roundRect(-w / 2, -h / 2, w, h, 3);
+        ctx.roundRect(-w / 2, -h / 2, w, h, 4);
       } else {
         ctx.rect(-w / 2, -h / 2, w, h);
       }
